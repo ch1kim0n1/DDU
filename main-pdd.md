@@ -4,110 +4,142 @@
 
 ### Product Development Document
 
+### Product, AI, Data, Visualization, and Investigation Architecture
+
 **Product Name:** DDU
 **Full Name:** Digital Detective Unit
-**Category:** Multimodal Investigation, OSINT, Knowledge Graph, and Intelligence Platform
-**Stage:** Concept / Pre-Alpha
-**Architecture:** Open-source-first, ontology-native, evidence-backed
-**Primary Users:** Investigators, security teams, researchers, intelligence analysts, fraud teams, journalists, enterprise risk teams
+**Category:** Multimodal Investigation, OSINT, Knowledge Graph, and AI Intelligence Platform
+**Architecture:** Open-source-first, ontology-native, evidence-backed, hypothesis-driven
+**Primary Interaction Model:** AI Detective + Living Investigation Graph
+**Core Principle:** Every conclusion must be traceable to evidence, uncertainty, provenance, and time.
 
 ---
 
 # 1. Executive Summary
 
-DDU is a multimodal investigation and intelligence platform designed to turn fragmented data into a structured, explorable, evidence-backed intelligence graph.
+DDU is an AI-native multimodal investigation platform that transforms fragmented digital evidence and public information into a continuously evolving intelligence graph.
 
-A user begins an investigation with one or more clues:
+A user begins with one or more investigative seeds:
 
+* Username
 * Image
 * Video
 * Audio
-* Username
-* Social profile
 * URL
+* Web page
+* Public profile
 * Document
+* Domain
+* Organization
 * Location
-* Public web entity
+* Known clue
 
-DDU then coordinates specialized open-source systems to extract information, discover related public data, identify candidate entities, connect relationships, analyze geographic and temporal patterns, and construct an evolving ontology around the investigation.
+DDU's AI Detective then:
 
-Instead of returning disconnected search results, DDU creates an intelligence model connecting:
+1. Establishes the investigation goal.
+2. Builds competing hypotheses.
+3. Identifies missing information.
+4. Determines which investigative action has the highest expected value.
+5. Calls specialized tools.
+6. Preserves evidence.
+7. Extracts observations.
+8. Correlates entities across modalities.
+9. Searches for supporting and contradicting evidence.
+10. Updates confidence in hypotheses.
+11. Expands promising investigative branches.
+12. Stops when additional investigation has insufficient value or reaches policy limits.
 
-* People
-* Usernames
-* Accounts
-* Organizations
-* Images
-* Videos
-* Audio
-* Documents
-* Posts
-* Objects
-* Vehicles
-* Locations
-* Events
-* Observations
-* Sources
-* Evidence
-* Claims
-* Hypotheses
+The investigation unfolds visually in real time.
 
-Every significant relationship should retain:
+The user does not wait for a spinner.
 
-* Source
-* Provenance
-* Timestamp
-* Extraction method
-* Confidence
-* Verification status
+They watch:
 
-The central product philosophy is:
+* Entities appear.
+* Relationships form.
+* Accounts connect.
+* Locations emerge.
+* Evidence accumulate.
+* Hypotheses strengthen or weaken.
+* Contradictions surface.
+* Investigation branches expand.
 
-> **Start with one clue. Build the intelligence picture.**
+DDU combines autonomous investigative reasoning with a human-controlled intelligence workspace.
 
-DDU is not intended to treat every machine-generated conclusion as fact. The system explicitly distinguishes observations, claims, inferred relationships, hypotheses, and verified facts.
+The core product experience is:
+
+> Start with one clue.
+> Watch DDU investigate it.
+> Understand every connection.
 
 ---
 
 # 2. Product Vision
 
-Build an open-source-first investigation operating system capable of transforming multimodal data and public information into a continuously evolving knowledge graph.
+DDU should become an AI investigation operating system.
 
-The core lifecycle is:
+Its purpose is not simply to search.
 
-**Ingest → Observe → Extract → Discover → Resolve → Correlate → Enrich → Verify → Connect → Investigate**
+Its purpose is to reason about:
 
-DDU should help answer:
+**What is known?**
 
-* What entities are present?
-* What objects appear across the evidence?
-* What text can be extracted from images and documents?
-* What locations are plausible?
-* Where else does this username appear?
-* What publicly available data is associated with these entities?
-* Are two discovered accounts likely connected?
-* Which objects appear in multiple images or videos?
-* Which entities share geographic or temporal overlap?
-* What evidence supports each relationship?
-* Which evidence contradicts an existing conclusion?
-* How has the investigation evolved?
-* What clue should be investigated next?
+**What might be true?**
+
+**What evidence supports it?**
+
+**What evidence contradicts it?**
+
+**What information is missing?**
+
+**What investigative action would reduce uncertainty the most?**
+
+The primary lifecycle is:
+
+**Acquire → Preserve → Observe → Hypothesize → Investigate → Correlate → Challenge → Verify → Learn**
+
+The final system should behave less like an AI search engine and more like a disciplined investigative team.
 
 ---
 
-# 3. Core Product Principle
+# 3. Product Thesis
 
-DDU must never collapse all intelligence into a single concept of "truth."
+Traditional OSINT systems typically operate as collections of tools.
 
-The platform should represent:
+A user decides:
+
+* what to search,
+* which tool to use,
+* which result matters,
+* what should be investigated next.
+
+DDU moves this reasoning into the platform.
+
+Instead of:
+
+> User → Tool → Result
+
+DDU operates as:
+
+> User → Investigation Goal → Hypotheses → Evidence Gaps → Best Next Action → Tool → Evidence → Belief Update → Re-plan
+
+The product's value comes from its ability to determine:
+
+> What should I investigate next, and why?
+
+---
+
+# 4. Core Intelligence Model
+
+DDU separates knowledge into six distinct categories.
 
 ## Observation
 
-Something directly detected or extracted.
+Something directly extracted or detected.
 
 Example:
 
-> OCR detected the text "Austin" in Image_14.
+PaddleOCR detected the word "Austin."
 
 ---
 
@@ -117,7 +149,7 @@ Something asserted by an external source.
 
 Example:
 
-> Profile_22 states that the account owner is located in Austin.
+A public profile states that the account holder lives in Austin.
 
 ---
 
@@ -127,27 +159,27 @@ A machine-generated conclusion.
 
 Example:
 
-> GeoCLIP predicts Central Texas as a likely location.
+GeoCLIP predicts Central Texas as the probable image location.
 
 ---
 
 ## Hypothesis
 
-A possible explanation requiring additional evidence.
+A proposition DDU is investigating.
 
 Example:
 
-> Account_22 may belong to Person_7.
+Account_A and Account_B may belong to the same person.
 
 ---
 
-## Fact
+## Verified Fact
 
-Information that has met a defined verification threshold.
+A conclusion meeting a defined verification standard.
 
 Example:
 
-> Image metadata contains GPS coordinates corresponding to Austin, Texas.
+A photograph contains GPS metadata corresponding to Austin.
 
 ---
 
@@ -157,1053 +189,1704 @@ Evidence incompatible with another claim or hypothesis.
 
 Example:
 
-> A timestamped observation places the entity in Dallas during the same period.
+Two supposedly identical entities appear in geographically incompatible locations at the same time.
 
-DDU should expose these distinctions visually and programmatically.
+These categories must remain visually and logically separate.
 
 ---
 
-# 4. Open-Source Technology Foundation
+# 5. Open-Source Technology Foundation
 
-DDU will use the following projects as foundational components.
+DDU uses replaceable open-source capabilities behind standardized adapters.
 
 ## GeoCLIP
-
-Repository:
-
-VicenteVivan/geo-clip
 
 Role:
 
 Visual geolocation.
 
-DDU uses GeoCLIP to generate candidate geographic locations from images.
+Usage:
 
-Output should be treated as:
-
-**Location Hypothesis**
-
-rather than confirmed location.
+Image → candidate geographic locations.
 
 ---
 
 ## SpiderFoot
 
-Repository:
-
-smicallef/spiderfoot
-
 Role:
 
-Automated OSINT enrichment.
+OSINT enrichment.
 
-SpiderFoot acts as a broad enrichment engine for supported public intelligence sources.
+Usage:
 
-DDU should integrate SpiderFoot as an investigation tool rather than embedding its entire application directly into the frontend.
+Domains, infrastructure, public identifiers, external intelligence sources.
 
 ---
 
 ## Sherlock
 
-Repository:
-
-sherlock-project/sherlock
-
 Role:
 
 Username-based account discovery.
 
-Input:
+Usage:
 
-Username
-
-Output:
-
-Candidate public accounts across supported services.
-
-Discovered accounts should initially become:
-
-**CandidateAccount**
-
-entities.
-
-They must not automatically be linked to a confirmed Person.
+Username → candidate public accounts.
 
 ---
 
 ## gallery-dl
 
-Repository:
+Role:
 
-mikf/gallery-dl
+Public media acquisition.
+
+Usage:
+
+Supported profile/media URL → media evidence.
+
+---
+
+## Browsertrix Crawler
 
 Role:
 
-Public media acquisition from supported websites.
+Evidence-grade web preservation.
 
-Given supported profile, gallery, or media URLs, gallery-dl can feed discovered media into DDU's processing pipeline.
+Usage:
 
-Collected media is sent to:
-
-* Grounded SAM 2
-* MMDetection
-* PaddleOCR
-* GeoCLIP
-* Qdrant
-
-where appropriate.
+URL → replayable web capture + page evidence.
 
 ---
 
 ## Grounded SAM 2
 
-Repository:
-
-IDEA-Research/Grounded-SAM-2
-
 Role:
 
-Open-vocabulary visual detection, segmentation, and video object tracking.
-
-DDU uses Grounded SAM 2 for:
-
-* Object discovery
-* Object segmentation
-* Open-vocabulary detection
-* Video tracking
-* Frame-level observations
-
-This is the primary visual intelligence engine.
+Open-vocabulary image/video detection and tracking.
 
 ---
 
 ## MMDetection
 
-Repository:
-
-open-mmlab/mmdetection
-
 Role:
 
-Advanced and specialized computer vision model framework.
-
-MMDetection supports cases where DDU requires:
-
-* Specialized object detectors
-* Custom trained models
-* Domain-specific detection
-* Instance segmentation
-* Detection pipelines not covered by the default Grounded SAM workflow
-
-Grounded SAM 2 and MMDetection should be complementary.
-
-Grounded SAM 2:
-
-General/open-vocabulary discovery.
-
-MMDetection:
-
-Specialized and trained detection.
+Specialized and domain-trained object detection.
 
 ---
 
 ## PaddleOCR
 
-Repository:
-
-PaddlePaddle/PaddleOCR
-
 Role:
 
-OCR and document intelligence.
-
-DDU uses PaddleOCR for:
-
-* Text in photographs
-* Street signs
-* Storefronts
-* Screenshots
-* Documents
-* Scanned evidence
-* Layout-aware extraction
-
-Detected text becomes an evidence-linked observation.
+Scene text and document OCR.
 
 ---
 
 ## Whisper
 
-Repository:
+Role:
 
-openai/whisper
+Audio/video transcription.
+
+---
+
+## CompreFace
 
 Role:
 
-Speech transcription.
-
-DDU uses Whisper for:
-
-* Audio transcription
-* Video speech extraction
-* Timestamped transcripts
-* Language detection
-
-Transcripts are indexed and converted into searchable evidence.
+Face similarity and candidate face matching.
 
 ---
 
 ## Splink
 
-Repository:
-
-moj-analytical-services/splink
-
 Role:
 
-Probabilistic entity resolution and record linkage.
-
-Splink forms the structured-data foundation of DDU's Entity Resolution Engine.
-
-It helps determine whether records may represent the same underlying entity.
-
-DDU should extend this with multimodal evidence.
+Structured probabilistic entity resolution.
 
 ---
 
 ## Qdrant
 
-Repository:
-
-qdrant/qdrant
-
 Role:
 
-Vector database and similarity search.
-
-DDU stores embeddings for:
-
-* Images
-* Object crops
-* Text
-* Documents
-* Posts
-* Entities
-* Descriptions
-
-Qdrant supports queries such as:
-
-* Find visually similar objects.
-* Find similar images.
-* Find semantically related documents.
-* Find posts describing similar events.
-
-Similarity results remain candidate relationships until validated.
+Vector similarity search.
 
 ---
 
 ## OpenSPG
 
-Repository:
-
-OpenSPG/openspg
-
 Role:
 
-Ontology and structured knowledge representation.
-
-OpenSPG provides the foundation for DDU's canonical knowledge model.
-
-The ontology describes:
-
-* What entities exist
-* What relationships are permitted
-* How knowledge is classified
-* How domain concepts connect
-
-OpenSPG represents DDU's structured intelligence layer.
+Canonical ontology.
 
 ---
 
 ## Graphiti
 
-Repository:
+Role:
 
-getzep/graphiti
+Temporal evolving knowledge.
+
+---
+
+## Neo4j
 
 Role:
 
-Temporal and continuously evolving knowledge graph.
-
-Graphiti manages knowledge that changes over time.
-
-DDU uses Graphiti to model:
-
-* New observations
-* Changing relationships
-* Temporal facts
-* Updated hypotheses
-* Historical states
-
-OpenSPG and Graphiti serve different roles:
-
-**OpenSPG**
-
-Defines the canonical ontology.
-
-**Graphiti**
-
-Maintains evolving temporal knowledge.
+Persistent graph storage and traversal.
 
 ---
 
 ## OpenLineage
 
-Repository:
-
-OpenLineage/OpenLineage
-
 Role:
 
-Data lineage and processing provenance.
-
-DDU uses OpenLineage concepts to record:
-
-* Where data originated
-* Which process created a derived object
-* Which tool processed it
-* Which model version was used
-* Which downstream outputs depend on it
-
-This provides process-level provenance.
-
-DDU should additionally implement evidence-level provenance for investigative relationships.
+Processing provenance and lineage.
 
 ---
 
 ## LangGraph
 
-Repository:
-
-langchain-ai/langgraph
-
 Role:
 
-Investigation agent orchestration.
-
-LangGraph coordinates investigation workflows.
-
-Example:
-
-Image received.
-
-Agent workflow:
-
-1. Read metadata.
-2. Run OCR.
-3. Run object detection.
-4. Run geolocation.
-5. Search extracted usernames.
-6. Trigger OSINT enrichment.
-7. Search the existing graph.
-8. Resolve candidate entities.
-9. Generate hypotheses.
-10. Identify missing evidence.
-
-Agents operate under explicit limits.
+Agent workflow and investigation orchestration.
 
 ---
 
 ## Cytoscape.js
 
-Repository:
-
-cytoscape/cytoscape.js
-
 Role:
 
-Interactive relationship graph visualization.
-
-Cytoscape.js powers the primary investigation graph.
-
-It displays:
-
-Person ↔ Account ↔ Username ↔ Post ↔ Media ↔ Object ↔ Location ↔ Event
+Interactive network visualization.
 
 ---
 
 ## MapLibre GL JS
 
-Repository:
-
-maplibre/maplibre-gl-js
-
 Role:
 
-Geospatial investigation interface.
-
-MapLibre displays:
-
-* Observations
-* Candidate locations
-* Confirmed locations
-* Geographic clusters
-* Events
-* Movement patterns
-* Location confidence
+Geospatial visualization.
 
 ---
 
-# 5. DDU System Architecture
+## S3-Compatible Object Store
+
+Role:
+
+Raw and derived evidence storage.
+
+---
+
+# 6. DDU Core Proprietary Systems
+
+The open-source projects provide capabilities.
+
+DDU owns the intelligence between them.
+
+## DDU Hypothesis Engine
+
+Maintains competing explanations.
+
+---
+
+## DDU Intelligence Correlation Engine
+
+Determines whether clues are related.
+
+---
+
+## DDU Belief Engine
+
+Updates confidence as new evidence arrives.
+
+---
+
+## DDU Contradiction Engine
+
+Actively searches for evidence against current conclusions.
+
+---
+
+## DDU Value-of-Information Engine
+
+Determines the most useful next investigative action.
+
+---
+
+## DDU Multimodal Entity Resolver
+
+Connects identities and objects across different modalities.
+
+---
+
+## DDU Evidence Dependency Graph
+
+Tracks how every conclusion depends on underlying evidence.
+
+---
+
+## DDU Investigation Strategy Learner
+
+Learns which investigative workflows produce valuable results.
+
+---
+
+## DDU Interview Intelligence Engine
+
+Extracts additional voluntary recollections from the user through non-leading investigative questioning.
+
+---
+
+# 7. AI Detective Architecture
+
+The AI Detective is the primary intelligence layer.
+
+It is not a chatbot with tool access.
+
+It operates as an investigation manager.
 
 ```text
-                    INPUT SOURCES
-
- Images
- Videos
- Audio
- Documents
- Usernames
- URLs
- Public Profiles
- Public Web Data
-       │
-       ▼
-┌────────────────────────────────────────────┐
-│             DDU INGESTION LAYER            │
-└─────────────────────┬──────────────────────┘
-                      │
-                      ▼
-┌────────────────────────────────────────────┐
-│          MULTIMODAL PERCEPTION             │
-│                                            │
-│ Grounded SAM 2  → object discovery         │
-│ MMDetection     → specialized detection    │
-│ PaddleOCR       → OCR / document text      │
-│ Whisper         → speech transcription     │
-└─────────────────────┬──────────────────────┘
-                      │
-                      ▼
-                ENTITY EXTRACTION
-                      │
-                      ▼
-┌────────────────────────────────────────────┐
-│          ENTITY RESOLUTION ENGINE          │
-│                                            │
-│ Splink                                     │
-│ Vector Similarity                          │
-│ Graph Context                              │
-│ Geographic Compatibility                   │
-│ Temporal Compatibility                     │
-└───────────────┬────────────────────────────┘
-                │
-         ┌──────┴──────┐
-         ▼             ▼
-      QDRANT       EVIDENCE STORE
-   Vector Search      Raw Sources
-         │             │
-         └──────┬──────┘
-                ▼
-┌────────────────────────────────────────────┐
-│             ENRICHMENT LAYER               │
-│                                            │
-│ GeoCLIP      → geolocation                 │
-│ Sherlock     → username discovery          │
-│ SpiderFoot   → OSINT enrichment            │
-│ gallery-dl   → media acquisition           │
-└─────────────────────┬──────────────────────┘
-                      │
-                      ▼
-             EVIDENCE EVALUATION
-                      │
-                      ▼
-                  OPENSPG
-             Canonical Ontology
-                      │
-                      ▼
-                  GRAPHITI
-          Temporal Knowledge Graph
-                      │
-                      ▼
-             GRAPH PERSISTENCE
-                      │
-                      ▼
-                  LANGGRAPH
-          Investigation Orchestrator
-                      │
-         ┌────────────┼─────────────┐
-         ▼            ▼             ▼
-     CYTOSCAPE      MAPLIBRE      TIMELINE
-       Graph           Map       Temporal View
-         │            │             │
-         └────────────┼─────────────┘
-                      ▼
-               EVIDENCE VIEWER
+User
+  │
+  ▼
+Lead AI Detective
+  │
+  ▼
+Investigation Goal
+  │
+  ▼
+Hypothesis Engine
+  │
+  ├── Hypothesis A
+  ├── Hypothesis B
+  └── Hypothesis C
+  │
+  ▼
+Evidence Gap Analysis
+  │
+  ▼
+Value-of-Information Engine
+  │
+  ▼
+Best Next Action
+  │
+  ▼
+Specialist Agent / Tool
+  │
+  ▼
+Evidence
+  │
+  ▼
+Correlation
+  │
+  ▼
+Belief Update
+  │
+  ▼
+Contradiction Search
+  │
+  ▼
+Re-plan
 ```
 
 ---
 
-# 6. Investigation Model
+# 8. Specialist AI Detective Team
 
-The top-level organizational object in DDU is an:
+DDU should use specialized investigative agents.
 
-**Investigation**
+## Lead Investigator
 
-Each investigation contains:
+Responsibilities:
 
-* Seeds
-* Entities
-* Evidence
-* Observations
-* Claims
-* Hypotheses
-* Relationships
-* Sources
-* Agent actions
-* Timeline
-* Geographic context
+* Maintain investigation objective.
+* Prioritize hypotheses.
+* Assign investigative tasks.
+* Determine when to stop.
+
+---
+
+## Identity Analyst
+
+Responsibilities:
+
+* Usernames.
+* Accounts.
+* Person/account linkage.
+* Splink entity resolution.
+* Face and profile similarity.
+
+---
+
+## Visual Intelligence Analyst
+
+Responsibilities:
+
+* Images.
+* Video.
+* Object tracking.
+* Visual similarity.
+* Object identity.
+
+---
+
+## Geospatial Analyst
+
+Responsibilities:
+
+* GeoCLIP.
+* Location clues.
+* Geographic consistency.
+* Map-based reasoning.
+
+---
+
+## Web and OSINT Analyst
+
+Responsibilities:
+
+* Sherlock.
+* SpiderFoot.
+* Browsertrix.
+* gallery-dl.
+* Public source discovery.
+
+---
+
+## Timeline Analyst
+
+Responsibilities:
+
+* Temporal ordering.
+* Event reconstruction.
+* Impossible travel.
+* Overlapping observations.
+
+---
+
+## Graph Analyst
+
+Responsibilities:
+
+* Neo4j traversal.
+* Cluster detection.
+* Hidden bridges.
+* Relationship patterns.
+
+---
+
+## Evidence Auditor
+
+Responsibilities:
+
+* Provenance.
+* Source reliability.
+* Independent corroboration.
+* Evidence dependency.
+
+---
+
+## Skeptic Agent
+
+Responsibilities:
+
+Actively attempt to disprove important hypotheses.
+
+The Skeptic Agent should ask:
+
+> What evidence would make this conclusion wrong?
+
+---
+
+# 9. Hypothesis-Driven Investigation
+
+DDU investigations revolve around hypotheses.
 
 Example:
-
-Investigation:
-
-Case 001
 
 Seed:
 
-Image_001
+username `example123`
 
-DDU analyzes the image and begins expanding the investigation.
+Hypothesis A:
 
----
+Multiple discovered accounts belong to the same person.
 
-# 7. Investigation Seeds
+Hypothesis B:
 
-DDU should initially support:
+The username is reused by unrelated people.
 
-## Image
+Hypothesis C:
 
-Triggers:
+Some accounts belong to the same person while others do not.
 
-* Metadata extraction
-* Grounded SAM 2
-* MMDetection where required
-* PaddleOCR
-* GeoCLIP
-* Qdrant similarity search
+DDU maintains evidence for and against each.
 
----
+The goal is not to confirm the first theory.
 
-## Video
-
-Triggers:
-
-* Frame extraction
-* Grounded SAM 2 tracking
-* MMDetection
-* OCR
-* Whisper
-* Object persistence analysis
-* Location inference
+The goal is to discriminate between plausible explanations.
 
 ---
 
-## Audio
+# 10. Value-of-Information Engine
 
-Triggers:
-
-* Whisper
-* Entity extraction
-* Language analysis
-* Timeline creation
-
----
-
-## Username
-
-Triggers:
-
-* Sherlock
-* SpiderFoot enrichment where supported
-* Candidate account creation
-* Entity resolution
-
----
-
-## URL
-
-Triggers:
-
-* Source classification
-* Metadata extraction
-* gallery-dl where supported
-* SpiderFoot modules
-* Content ingestion
-
----
-
-## Document
-
-Triggers:
-
-* PaddleOCR when required
-* Text extraction
-* Entity extraction
-* Qdrant indexing
-* Ontology ingestion
-
----
-
-# 8. Visual Intelligence
-
-DDU's visual pipeline consists of two complementary systems.
-
-## Grounded SAM 2
-
-Used for:
-
-* General object discovery
-* Text-prompted detection
-* Segmentation
-* Video object tracking
-
-Example:
-
-Video_04
-
-contains:
-
-Vehicle_Observation_11
-
-tracked from:
-
-00:04:21
-
-to:
-
-00:04:47
-
----
-
-## MMDetection
-
-Used for:
-
-* Domain-specific detectors
-* Custom object classes
-* High-specialization detection
-* Models trained for specific operational environments
-
-Example:
-
-A custom MMDetection model could identify specialized object subclasses not reliably captured by open-vocabulary detection.
-
----
-
-# 9. Image Geolocation
-
-DDU uses GeoCLIP as the visual geolocation engine.
-
-Input:
-
-Image
-
-Output:
-
-Ranked geographic candidates.
-
-Example:
-
-Candidate 1:
-
-Austin, Texas
-
-Candidate 2:
-
-San Antonio, Texas
-
-Candidate 3:
-
-Dallas, Texas
-
-DDU should combine GeoCLIP with:
-
-* EXIF
-* OCR
-* Detected language
-* Visible signs
-* Landmark evidence
-* Other geographic clues
-
-Final output:
-
-**Location Hypothesis**
-
-Example:
-
-Austin, Texas
-
-Confidence:
-
-0.84
-
-Supporting evidence:
-
-GeoCLIP prediction
-
-OCR: "Austin"
-
-Architecture clue
-
-Independent source count:
-
-2
-
----
-
-# 10. Username and Account Discovery
-
-Sherlock serves as the primary username discovery engine.
-
-Input:
-
-example_username
-
-Output:
-
-Candidate public profiles.
-
-Each result becomes:
-
-CandidateAccount
-
-Example:
-
-CandidateAccount_17
-
-Platform:
-
-GitHub
-
-Username:
-
-example_username
-
-URL:
-
-...
-
-Discovery Method:
-
-Sherlock
-
-Confidence:
-
-Discovery confirmed
-
-Identity Confidence:
-
-Unknown
-
-This distinction matters.
-
-Sherlock can confirm that an account exists.
-
-It cannot confirm that two accounts belong to the same real person.
-
----
-
-# 11. Automated OSINT Enrichment
-
-SpiderFoot acts as DDU's general OSINT enrichment engine.
-
-DDU should expose selected SpiderFoot capabilities as modular tools.
-
-Example workflow:
-
-Username discovered
-
-↓
-
-Domain discovered
-
-↓
-
-SpiderFoot enrichment
-
-↓
-
-New entities discovered
-
-↓
-
-Ontology ingestion
-
-Possible outputs:
-
-* Domain
-* Email
-* Organization
-* IP
-* Public identifier
-* Connected service
-
-Every result receives provenance information.
-
----
-
-# 12. Social Media and Media Acquisition
-
-gallery-dl acts as a public media acquisition layer for supported sources.
-
-Workflow:
-
-Sherlock finds candidate account.
-
-↓
-
-Platform URL sent to collector router.
-
-↓
-
-gallery-dl retrieves accessible supported media.
-
-↓
-
-Media stored as evidence.
-
-↓
-
-Grounded SAM 2 analyzes objects.
-
-↓
-
-PaddleOCR extracts visible text.
-
-↓
-
-GeoCLIP analyzes location.
-
-↓
-
-Qdrant generates embeddings.
-
-↓
-
-Graph relationships update.
-
-The collector must not bypass authorization controls or private access restrictions.
-
----
-
-# 13. Entity Resolution Engine
-
-This is a core DDU capability.
-
-The problem:
-
-Sherlock finds:
-
-Account_A
-
-SpiderFoot finds:
-
-Identifier_B
-
-Image analysis finds:
-
-Person_Observation_C
-
-Another source finds:
-
-Username_D
-
-Are these related?
-
-DDU should calculate candidate relationships using:
-
-* Splink record linkage
-* Username similarity
-* Structured attribute matching
-* Qdrant embedding similarity
-* Geographic compatibility
-* Temporal compatibility
-* Graph proximity
-* Shared identifiers
-* Source reliability
-
-Output:
-
-Account_A
-
-POSSIBLY_BELONGS_TO
-
-Person_7
-
-Confidence:
-
-0.76
-
-Supporting signals:
-
-Username match
-
-Location overlap
-
-Shared URL
-
-Contradicting signals:
-
-Different profile description
-
-DDU should never automatically perform high-impact identity merges based only on weak similarity.
-
----
-
-# 14. Multimodal Entity Resolution
-
-Splink alone is not enough.
-
-DDU should implement a proprietary layer above Splink.
-
-## DDU Entity Resolution Engine
+For every possible action, calculate an Investigation Priority Score.
 
 Inputs:
 
-Structured similarity
+* Expected information gain.
+* Hypothesis relevance.
+* Cost.
+* Latency.
+* Tool reliability.
+* Investigation depth.
+* Privacy/access constraints.
+* Redundancy.
 
-*
+Conceptually:
 
-Visual similarity
+```text
+Priority =
+Expected Information Gain
+× Relevance
+× Reliability
+÷ Cost
+÷ Redundancy
+```
 
-*
+Example:
 
-Semantic similarity
+Run Sherlock:
 
-*
+High information value.
 
-Temporal compatibility
+Low cost.
 
-*
+Run GeoCLIP on a key photograph:
 
-Geographic compatibility
+High information value.
 
-*
+Low cost.
 
-Graph context
+Download thousands of unrelated images:
 
-*
+Low marginal information value.
 
-Source reliability
+High cost.
+
+DDU prioritizes the highest-value action.
+
+---
+
+# 11. Investigation Frontier
+
+DDU treats investigations as intelligent graph search.
+
+Maintain:
+
+* Investigated Nodes.
+* Frontier Nodes.
+* High-Priority Leads.
+* Low-Priority Leads.
+* Blocked Leads.
+* Rejected Leads.
+
+Every frontier node receives a priority.
+
+The AI Detective investigates high-value nodes first.
+
+This prevents uncontrolled recursive expansion.
+
+---
+
+# 12. Active Contradiction Search
+
+Every important hypothesis should trigger an adversarial investigation.
+
+Example:
+
+Hypothesis:
+
+Account_A and Account_B belong to the same person.
+
+DDU searches for:
+
+* Conflicting age.
+* Conflicting gender information.
+* Impossible location overlap.
+* Contradictory employment history.
+* Incompatible timestamps.
+* Different linked identities.
+
+The system should reward disconfirmation.
+
+---
+
+# 13. Belief Updating
+
+Confidence should evolve.
+
+Example:
+
+```text
+Account A = Person X
+
+Initial probability: 0.20
+
+Exact username:
+0.48
+
+Shared domain:
+0.67
+
+Similar profile imagery:
+0.82
+
+Geographic overlap:
+0.90
+
+Contradictory stated age:
+0.71
+```
+
+Confidence history must remain visible.
+
+---
+
+# 14. Source Independence
+
+DDU must identify whether multiple pieces of evidence originate from the same source.
+
+Example:
+
+Source A publishes claim.
+
+Source B copies A.
+
+Source C quotes B.
+
+The system should not count this as three independent confirmations.
+
+DDU should maintain:
+
+Evidence Origin
+
+↓
+
+Derived Sources
+
+↓
+
+Dependent Claims
+
+---
+
+# 15. Evidence Dependency Graph
+
+Every conclusion should have dependencies.
+
+```text
+Hypothesis
+   │
+   ├── Relationship A
+   │      └── Observation A
+   │             └── Image Evidence
+   │
+   ├── Relationship B
+   │      └── Web Capture
+   │
+   └── Contradiction C
+          └── Document Evidence
+```
+
+If evidence is invalidated:
+
+DDU automatically identifies affected downstream conclusions.
+
+Example:
+
+Evidence_22 marked unreliable.
+
+DDU recalculates:
+
+* 4 relationships.
+* 2 hypotheses.
+* 1 entity merge.
+
+---
+
+# 16. Temporal-Spatial Consistency Engine
+
+DDU should reason about:
+
+**Who + What + Where + When**
+
+Example:
+
+Entity_A observed:
+
+Austin
+
+14:00
+
+Entity_A observed:
+
+New York
+
+14:30
+
+DDU generates:
+
+Temporal-Geographic Contradiction.
+
+This applies to:
+
+* People.
+* Vehicles.
+* Devices.
+* Accounts.
+* Events.
+
+---
+
+# 17. Cross-Modal Object Identity
+
+DDU should resolve physical objects across evidence.
+
+Example:
+
+Vehicle Observation A.
+
+Vehicle Observation B.
+
+Similarity signals:
+
+* Visual embedding.
+* Make.
+* Model.
+* Color.
+* Plate OCR.
+* Damage pattern.
+* Geographic compatibility.
+* Temporal compatibility.
 
 Output:
 
-Association probability.
+Vehicle_A
 
-This should become one of DDU's primary proprietary advantages.
+POSSIBLY_SAME_AS
 
----
+Vehicle_B
 
-# 15. Vector Intelligence
+Confidence:
 
-Qdrant provides similarity search.
+0.83
 
-Collections may include:
+Apply similar logic to:
 
-## Image Embeddings
-
-Queries:
-
-Find similar images.
-
----
-
-## Object Embeddings
-
-Queries:
-
-Find visually similar objects.
+* Buildings.
+* Clothing.
+* Devices.
+* Logos.
+* Locations.
+* Distinctive physical objects.
 
 ---
 
-## Text Embeddings
+# 18. Investigation Memory
 
-Queries:
+DDU should use three memory levels.
 
-Find related posts.
+## Case Memory
 
----
-
-## Document Embeddings
-
-Queries:
-
-Find related reports.
+Everything learned in one investigation.
 
 ---
 
-## Entity Embeddings
+## Entity Memory
 
-Queries:
-
-Find entities with similar contextual profiles.
-
-Vector similarity never directly creates verified relationships.
-
-It creates:
-
-CandidateRelationship
+Everything known about a specific entity.
 
 ---
 
-# 16. DDU Ontology
+## Method Memory
 
-OpenSPG provides the canonical ontology layer.
+Historical performance of investigation strategies.
 
-Core entity types:
+Example:
 
-Person
+DDU learns:
 
-Account
+Sherlock → Browsertrix → OCR → Domain Search
 
-Username
+produces high-value results for a certain account pattern.
+
+Future investigations prioritize that workflow.
+
+---
+
+# 19. Strategy Learning
+
+Record every investigative action.
+
+Fields:
+
+Tool.
+
+Context.
+
+Cost.
+
+Latency.
+
+Entities discovered.
+
+Verified relationships created.
+
+False positives.
+
+Information gain.
+
+Over time DDU learns:
+
+Which tools are useful for which situations?
+
+This produces adaptive investigation policies.
+
+---
+
+# 20. AI Interview Intelligence
+
+The user may know useful information that they have not initially provided.
+
+DDU should ask structured, non-leading questions.
+
+Example:
+
+User:
+
+I met this person at a party.
+
+DDU:
+
+> Tell me everything you remember about them.
+
+User:
+
+Tall, around my age, long hair.
+
+DDU:
+
+> What do you remember about their hair?
+
+User:
+
+Dark, maybe brown.
+
+DDU stores:
+
+Hair Length:
+
+Long.
+
+Confidence:
+
+Medium.
+
+Hair Color:
+
+Dark/Brown.
+
+Confidence:
+
+Low to Medium.
+
+Source:
+
+User recollection.
+
+---
+
+# 21. Interview Intelligence Engine
+
+Architecture:
+
+```text
+User Conversation
+      │
+      ▼
+Recall Planner
+      │
+      ▼
+Known Attributes
+      │
+      ▼
+Missing High-Value Attributes
+      │
+      ▼
+Question Value Scoring
+      │
+      ▼
+Best Non-Leading Question
+      │
+      ▼
+User Response
+      │
+      ▼
+Attribute Extraction
+      │
+      ▼
+Confidence / Uncertainty
+      │
+      ▼
+Knowledge Graph
+```
+
+---
+
+# 22. Interview Agent Components
+
+## Recall Agent
+
+Encourages broad free recall.
+
+---
+
+## Clarification Agent
+
+Clarifies ambiguous statements.
+
+---
+
+## Gap Agent
+
+Detects missing investigative attributes.
+
+---
+
+## Consistency Agent
+
+Identifies inconsistencies.
+
+---
+
+## Contamination Guard
+
+Prevents leading questions.
+
+---
+
+## Interview Strategist
+
+Selects the highest-value next question.
+
+---
+
+# 23. Question Value Scoring
+
+Do not ask questions merely because an attribute is missing.
+
+Ask based on information value.
+
+Example:
+
+Candidate A:
+
+Brown hair.
+
+Rock climbing.
+
+Austin.
+
+Candidate B:
+
+Blond hair.
+
+Gaming.
+
+Dallas.
+
+DDU should independently ask:
+
+> What do you remember about their hair?
+
+Then:
+
+> Did they ever mention activities they regularly did?
+
+It should not reveal candidate answers first.
+
+---
+
+# 24. User Investigation Flow
+
+## Step 1: Start Investigation
+
+User selects:
+
+New Investigation.
+
+Inputs:
+
+Username.
+
+Image.
+
+Video.
+
+URL.
+
+Document.
+
+Domain.
+
+Location.
+
+Known description.
+
+---
+
+## Step 2: Investigation Goal
+
+User describes objective.
+
+Example:
+
+> Identify which public accounts may belong to this person.
+
+---
+
+## Step 3: AI Detective Planning
+
+DDU creates:
+
+* Initial hypotheses.
+* Known facts.
+* Unknowns.
+* Investigation branches.
+* Tool plan.
+
+---
+
+## Step 4: User Knowledge Interview
+
+If useful, DDU asks:
+
+* Appearance.
+* Context.
+* Known username.
+* Hobbies.
+* Occupation.
+* Location.
+* Social context.
+
+Questions are prioritized by expected information gain.
+
+---
+
+## Step 5: Autonomous Investigation
+
+DDU begins calling tools.
+
+The investigation graph appears immediately.
+
+---
+
+## Step 6: Real-Time Investigation
+
+The user watches:
+
+Searching.
+
+Discovering.
+
+Connecting.
+
+Questioning.
+
+Validating.
+
+Rejecting.
+
+---
+
+## Step 7: User Steering
+
+User can:
+
+Investigate deeper.
+
+Stop branch.
+
+Verify relationship.
+
+Reject relationship.
+
+Add evidence.
+
+Ask AI Detective a question.
+
+---
+
+## Step 8: Findings
+
+DDU generates:
+
+* Primary findings.
+* Competing hypotheses.
+* Confidence.
+* Supporting evidence.
+* Contradictions.
+* Unresolved questions.
+
+---
+
+# 25. Real-Time Visualization Philosophy
+
+The user should never feel:
+
+> The system is processing.
+
+The user should feel:
+
+> The investigation is unfolding.
+
+The visualization system should communicate:
+
+**Searching → Discovering → Connecting → Testing → Validating**
+
+---
+
+# 26. Living Investigation Graph
+
+Cytoscape.js powers the main visual workspace.
+
+Nodes should animate into the graph as they are discovered.
+
+Examples:
+
+Username node appears.
+
+↓
+
+Account nodes expand.
+
+↓
+
+Profile images appear.
+
+↓
+
+Domain node connects.
+
+↓
+
+Location hypothesis appears.
+
+↓
+
+Organization cluster forms.
+
+Graph layout should update smoothly rather than reload.
+
+---
+
+# 27. Progressive Graph Reveal
+
+Do not display every node immediately.
+
+Use semantic levels.
+
+## Level 1
+
+Strong direct relationships.
+
+## Level 2
+
+Relevant second-order relationships.
+
+## Level 3
+
+Full graph.
+
+Users can expand branches manually.
+
+The AI Detective can automatically expand high-priority frontier nodes.
+
+---
+
+# 28. Visual Entity Language
+
+Each entity should have a distinct visual form.
+
+Person:
+
+Portrait or circular node.
+
+Account:
+
+Platform icon.
+
+Location:
+
+Map pin.
+
+Vehicle:
+
+Object card.
+
+Image:
+
+Thumbnail.
+
+Video:
+
+Thumbnail with play indicator.
+
+Organization:
+
+Organization node.
+
+Domain:
+
+Globe/network node.
+
+Evidence:
+
+Document/media card.
+
+Hypothesis:
+
+Diamond.
+
+Contradiction:
+
+Conflict indicator.
+
+---
+
+# 29. Relationship Visual Language
+
+Verified:
+
+Solid edge.
+
+Candidate:
+
+Dashed edge.
+
+Weak hypothesis:
+
+Faint edge.
+
+Strong relationship:
+
+Thicker edge.
+
+Contradiction:
+
+Double or broken conflict edge.
+
+Historical:
+
+Dimmed edge.
+
+Confidence should also influence visual intensity.
+
+---
+
+# 30. Detective Activity Stream
+
+Persistent side panel.
+
+Example:
+
+```text
+21:01:14
+Checking username across public platforms.
+
+21:01:19
+12 candidate accounts discovered.
+
+21:01:28
+3 profiles share similar imagery.
+
+21:01:44
+New geographic evidence detected.
+
+21:01:51
+Location hypothesis:
+Austin, Texas
+Confidence increased from 58% to 74%.
+
+21:02:10
+Contradiction detected:
+Two profiles report incompatible ages.
+```
+
+This gives continuous visible progress.
+
+---
+
+# 31. Investigation Branches
+
+Display active reasoning branches.
+
+Example:
+
+Identity
+
+Status:
+
+Strong Lead.
+
+Geolocation
+
+Status:
+
+Exploring.
 
 Organization
 
-Location
+Status:
 
-Object
+Weak Lead.
 
 Vehicle
 
-Image
+Status:
 
-Video
+Blocked.
 
-Audio
+User can select:
 
-Document
+Investigate Deeper.
 
-Post
+Pause.
 
-Event
-
-Observation
-
-Evidence
-
-Source
-
-Claim
-
-Hypothesis
-
-Investigation
+Stop.
 
 ---
 
-# 17. Relationship Model
+# 32. New Lead Events
 
-Example relationships:
+High-value discoveries should produce subtle visual focus.
+
+Example:
+
+NEW LEAD
+
+Shared external domain detected across three accounts.
+
+Relevant graph nodes highlight.
+
+Camera shifts toward the cluster.
+
+The animation should be restrained.
+
+DDU should feel sophisticated, not gamified.
+
+---
+
+# 33. Evidence Thumbnails
+
+Evidence nodes should show real visual content where possible.
+
+Examples:
+
+Profile photo.
+
+Captured page.
+
+Vehicle crop.
+
+Image.
+
+Document preview.
+
+This makes the graph understandable without clicking every node.
+
+---
+
+# 34. Graph Constellations
+
+Automatically group nodes into clusters.
+
+Examples:
+
+Identity Cluster.
+
+Organization Cluster.
+
+Account Cluster.
+
+Location Cluster.
+
+Event Cluster.
+
+Media Cluster.
+
+At distant zoom:
+
+Show clusters.
+
+At close zoom:
+
+Reveal individual nodes.
+
+---
+
+# 35. Synchronized Analytical Views
+
+The four primary views are:
+
+## Graph
+
+Relationships.
+
+## Map
+
+Geographic intelligence.
+
+## Timeline
+
+Temporal intelligence.
+
+## Evidence
+
+Source material.
+
+All views remain synchronized.
+
+Example:
+
+Select Account_A.
+
+Graph highlights relationships.
+
+Map shows relevant locations.
+
+Timeline displays activity.
+
+Evidence shows related sources.
+
+---
+
+# 36. Map Visualization
+
+MapLibre GL JS.
+
+Location types must remain visually distinct.
+
+Exact Observation.
+
+Verified Location.
+
+Approximate Location.
+
+GeoCLIP Candidate.
+
+Location Hypothesis.
+
+Confidence Region.
+
+Never display a predicted coordinate identically to a verified coordinate.
+
+---
+
+# 37. Timeline Visualization
+
+Timeline shows:
+
+Account discovery.
+
+Media creation.
+
+Evidence acquisition.
+
+Observed events.
+
+Entity movements.
+
+Hypothesis changes.
+
+Confidence changes.
+
+Contradictions.
+
+Selecting a period filters:
+
+Graph.
+
+Map.
+
+Evidence.
+
+---
+
+# 38. Investigation Playback
+
+DDU should record investigation progression.
+
+Users can replay:
+
+```text
+00:00
+Seed received.
+
+00:08
+Username accounts discovered.
+
+00:17
+Public profile captured.
+
+00:29
+Image analyzed.
+
+00:41
+Location hypothesis created.
+
+01:04
+Second account associated.
+
+01:32
+Contradiction discovered.
+```
+
+The graph reconstructs itself chronologically.
+
+Use cases:
+
+* Audit.
+* Training.
+* Presentation.
+* Case review.
+* Explainability.
+
+---
+
+# 39. Investigation HUD
+
+Persistent compact summary.
+
+Example:
+
+Entities:
+
+143
+
+Evidence:
+
+58
+
+Active Hypotheses:
+
+12
+
+Contradictions:
+
+4
+
+Active Analysts:
+
+3
+
+High-Priority Leads:
+
+7
+
+This gives visible momentum.
+
+---
+
+# 40. Primary UI Layout
+
+Recommended layout:
+
+```text
+┌────────────────────────────────────────────────────────┐
+│ DDU / CASE-042                         Investigation HUD │
+├────────────────┬───────────────────────────────────────┤
+│ AI DETECTIVE   │                                       │
+│                │                                       │
+│ Activity       │          LIVE GRAPH                   │
+│ Hypotheses     │                                       │
+│ Findings       │                                       │
+│ Branches       │                                       │
+│ Questions      │                                       │
+│                │                                       │
+├────────────────┴──────────────────────────┬────────────┤
+│ TIMELINE                                  │ EVIDENCE   │
+├───────────────────────────────────────────┴────────────┤
+│ MAP                                                    │
+└────────────────────────────────────────────────────────┘
+```
+
+Alternative:
+
+AI Detective remains persistent.
+
+Main canvas switches between:
+
+Graph.
+
+Map.
+
+Timeline.
+
+Evidence.
+
+---
+
+# 41. Evidence Architecture
+
+Every upper-level conclusion must be traceable downward.
+
+```text
+Hypothesis
+   ↓
+Relationship
+   ↓
+Entity
+   ↓
+Observation
+   ↓
+Evidence
+```
+
+This is the foundational DDU rule.
+
+---
+
+# 42. Canonical Evidence Model
+
+Fields:
+
+evidence_id
+
+investigation_id
+
+type
+
+storage_uri
+
+source_uri
+
+sha256
+
+mime_type
+
+size
+
+acquired_at
+
+original_timestamp
+
+acquisition_method
+
+parent_evidence_id
+
+verification_status
+
+---
+
+# 43. Evidence Types
+
+IMAGE
+
+VIDEO
+
+AUDIO
+
+DOCUMENT
+
+WEB_CAPTURE
+
+SCREENSHOT
+
+PROFILE
+
+POST
+
+FRAME
+
+OBJECT_CROP
+
+FACE_CROP
+
+---
+
+# 44. Observation Model
+
+Fields:
+
+observation_id
+
+type
+
+value
+
+confidence
+
+source_evidence_id
+
+tool
+
+tool_version
+
+model
+
+model_version
+
+observed_at
+
+created_at
+
+---
+
+# 45. Entity Model
+
+Entity types:
+
+Person.
+
+Account.
+
+Username.
+
+Organization.
+
+Domain.
+
+Location.
+
+Vehicle.
+
+Object.
+
+Image.
+
+Video.
+
+Audio.
+
+Document.
+
+Post.
+
+WebPage.
+
+Event.
+
+Source.
+
+---
+
+# 46. Relationship Model
+
+Relationship types:
 
 OWNS
 
@@ -1231,874 +1914,623 @@ CONTRADICTED_BY
 
 DERIVED_FROM
 
-EXTRACTED_FROM
-
 DISCOVERED_BY
 
-Every relationship contains:
+Every relationship includes:
 
-* Confidence
-* Timestamp
-* Source
-* Evidence references
-* Extraction method
-* Tool version
-* Verification state
+Confidence.
 
----
+Evidence.
 
-# 18. Temporal Intelligence
+Contradictions.
 
-Graphiti manages evolving knowledge.
+Time.
 
-Example:
+Verification status.
 
-Day 1
-
-Account_A
-
-POSSIBLY_BELONGS_TO
-
-Person_X
-
-Confidence:
-
-0.48
-
-Day 4
-
-New evidence increases confidence:
-
-0.73
-
-Day 9
-
-Contradictory location data appears:
-
-0.55
-
-DDU preserves this evolution.
-
-The historical state should remain queryable.
+Inference method.
 
 ---
 
-# 19. Provenance
+# 47. Full Processing Architecture
 
-OpenLineage provides a foundation for processing lineage.
-
-Example:
-
-Image_22
-
-processed_by
-
-PaddleOCR vX
-
-↓
-
-TextObservation_91
-
-↓
-
-EntityExtraction
-
-↓
-
-LocationHypothesis_18
-
-Users should be able to answer:
-
-Where did this conclusion come from?
-
-Which model created it?
-
-Which evidence was used?
-
-What downstream objects depend on it?
-
----
-
-# 20. Evidence System
-
-DDU should maintain an immutable or append-only evidence store wherever practical.
-
-Evidence types:
-
-* Image
-* Video
-* Audio
-* Document
-* Web snapshot
-* Profile
-* Post
-* Metadata
-* Model output
-
-Each evidence object contains:
-
-Source
-
-Acquisition time
-
-Original timestamp
-
-Hash
-
-MIME type
-
-Processing history
-
-Origin URL where applicable
-
-Investigation ID
-
----
-
-# 21. Confidence Engine
-
-Confidence should not be calculated by blindly averaging model probabilities.
-
-DDU should consider:
-
-* Number of supporting signals
-* Number of independent sources
-* Source reliability
-* Evidence freshness
-* Model confidence
-* Contradicting evidence
-* Temporal consistency
-* Geographic consistency
-
-Example:
-
-Hypothesis:
-
-Entity_A associated with Location_B
-
-Support:
-
-GeoCLIP
-
-OCR
-
-Social metadata
-
-Contradiction:
-
-Recent observation elsewhere
-
-Result:
-
-Confidence 0.71
+```text
+                          USER
+                           │
+                           ▼
+                    LEAD AI DETECTIVE
+                           │
+                           ▼
+                   HYPOTHESIS ENGINE
+                           │
+                           ▼
+                 EVIDENCE GAP ANALYSIS
+                           │
+                           ▼
+              VALUE-OF-INFORMATION PLANNER
+                           │
+                           ▼
+                  SPECIALIST AI TEAM
+                           │
+                           ▼
+                       TOOL LAYER
+                           │
+      ┌────────────────────┼─────────────────────┐
+      ▼                    ▼                     ▼
+  VISUAL TOOLS         OSINT TOOLS         WEB ACQUISITION
+  SAM2                 Sherlock            Browsertrix
+  MMDetection          SpiderFoot          gallery-dl
+  PaddleOCR
+  Whisper
+  CompreFace
+  GeoCLIP
+                           │
+                           ▼
+                       EVIDENCE
+                           │
+                           ▼
+                     OBSERVATIONS
+                           │
+                           ▼
+                  ENTITY RESOLUTION
+                  Splink + Qdrant
+                           │
+                           ▼
+             DDU INTELLIGENCE CORRELATION
+                           │
+                           ▼
+                 CONTRADICTION ENGINE
+                           │
+                           ▼
+                    BELIEF ENGINE
+                           │
+                           ▼
+                       OpenSPG
+                           │
+                           ▼
+                       Graphiti
+                           │
+                           ▼
+                        Neo4j
+                           │
+                           ▼
+                    OpenLineage
+                           │
+                           ▼
+                INVESTIGATION FRONTIER
+                           │
+                  ┌────────┴────────┐
+                  ▼                 ▼
+              Continue           Stop
+                  │
+                  ▼
+               Re-plan
+```
 
 ---
 
-# 22. Investigation Agent
+# 48. Agent Runtime
 
-LangGraph powers the agentic investigation workflow.
+LangGraph powers investigation state.
 
-The DDU agent acts as an:
+State:
 
-**Digital Investigator**
+investigation_id
 
-The agent does not simply answer questions.
+goal
 
-It coordinates investigative tools.
+hypotheses
 
-Example:
+known_entities
 
-User uploads an image.
+evidence
 
-Agent:
+contradictions
 
-1. Extract metadata.
-2. Run OCR.
-3. Analyze objects.
-4. Generate location candidates.
-5. Search existing graph.
-6. Extract usernames.
-7. Run Sherlock.
-8. Trigger SpiderFoot where appropriate.
-9. Acquire supported public media.
-10. Analyze newly discovered media.
-11. Resolve candidate entities.
-12. Update ontology.
-13. Generate unresolved hypotheses.
-14. Stop when predefined investigation conditions are met.
+frontier
+
+tool_budget
+
+depth
+
+permissions
+
+open_questions
 
 ---
 
-# 23. Agent Stop Conditions
+# 49. Agent Loop
 
-Agents must have explicit stop conditions.
+```text
+Assess Investigation
+      ↓
+Select Highest-Value Question
+      ↓
+Select Tool or User Question
+      ↓
+Execute
+      ↓
+Normalize Result
+      ↓
+Preserve Evidence
+      ↓
+Update Graph
+      ↓
+Update Hypotheses
+      ↓
+Search for Contradictions
+      ↓
+Evaluate Frontier
+      ↓
+Continue or Stop
+```
+
+---
+
+# 50. Stop Conditions
 
 Stop when:
 
-* Investigation depth limit reached
-* Tool budget reached
-* No meaningful new entities discovered
-* Confidence threshold reached
-* Required evidence collected
-* Investigation scope boundary reached
-* Human confirmation required
+No high-value unexplored leads remain.
 
-The system should never indefinitely recurse through discovered entities.
+Information gain falls below threshold.
+
+Investigation budget exhausted.
+
+Depth limit reached.
+
+Tool limit reached.
+
+Human approval required.
+
+Scope boundary reached.
+
+Repeated loop detected.
+
+Investigation goal satisfied.
 
 ---
 
-# 24. Graph Interface
+# 51. Tool Adapter Contract
 
-Cytoscape.js powers the relationship workspace.
-
-Example graph:
+Every external system implements a DDU adapter.
 
 ```text
-Person
-  │
-  ├── uses ───────── Account
-  │                     │
-  │                     └── posted ── Image
-  │                                    │
-  │                                    ├── contains ── Vehicle
-  │                                    │
-  │                                    └── observed_at ── Location
-  │
-  └── associated_with ── Organization
+ToolAdapter
+
+name
+version
+supported_inputs
+supported_outputs
+
+health()
+execute()
+normalize()
 ```
 
-Users can:
+Output:
 
-* Expand nodes
-* Collapse branches
-* Filter entity types
-* Filter confidence
-* Search relationships
-* Find shortest paths
-* Compare entities
-* Inspect evidence
-* Accept/reject candidate relationships
+```text
+ToolResult
 
----
+run_id
+observations[]
+entities[]
+relationships[]
+artifacts[]
+confidence
+errors[]
+provenance
+```
 
-# 25. Map Interface
-
-MapLibre GL JS powers geographic intelligence.
-
-Layers:
-
-Confirmed Locations
-
-Candidate Locations
-
-Observations
-
-Events
-
-Media
-
-Clusters
-
-Routes
-
-Confidence Areas
-
-Selecting an entity in Cytoscape should highlight corresponding map observations.
-
-Selecting a map observation should highlight the corresponding graph nodes.
+No external tool writes directly to the canonical graph.
 
 ---
 
-# 26. Timeline
+# 52. Persistent Data Architecture
 
-DDU should build a custom temporal interface synchronized with:
+## Neo4j
 
-* Graph
-* Map
-* Evidence
+Canonical relationship graph.
 
-Users can scrub through time.
+## Qdrant
 
-Example:
+Vector similarity.
 
-January
+## PostgreSQL
 
-Account discovered.
+Application metadata.
 
-February
+## S3-Compatible Store
 
-Image observed.
+Evidence.
 
-March
+## Graphiti
 
-Vehicle associated.
+Temporal intelligence.
 
-April
+## OpenSPG
 
-Location hypothesis contradicted.
-
-Graph and map update according to the selected date.
+Ontology.
 
 ---
 
-# 27. Unified Investigation Workspace
+# 53. Event Architecture
 
-Primary navigation:
+Queues:
 
-## COMMAND
+vision
 
-Investigation overview.
+ocr
 
-## GRAPH
+audio
 
-Relationship analysis.
+geo
 
-## MAP
+face
 
-Geospatial analysis.
+osint
 
-## TIMELINE
+web_capture
 
-Temporal analysis.
+embedding
 
-## EVIDENCE
+correlation
 
-Source inspection.
+graph_update
 
-## ENTITIES
+belief_update
 
-Entity database.
+contradiction_scan
 
-## SOURCES
+Events:
 
-Source management.
+evidence.created
 
-## HYPOTHESES
+observation.created
 
-Unresolved conclusions.
+entity.candidate.created
 
-## AGENT
+relationship.candidate.created
 
-Investigation automation.
+hypothesis.updated
 
----
+contradiction.detected
 
-# 28. DDU Command View
+lead.discovered
 
-The default investigation dashboard should summarize:
-
-Investigation Status
-
-Entities Discovered
-
-Evidence Items
-
-Candidate Relationships
-
-Confirmed Relationships
-
-Open Hypotheses
-
-Contradictions
-
-Geographic Candidates
-
-Agent Activity
-
-The objective is to give the investigator a concise intelligence picture before entering individual analytical views.
+investigation.completed
 
 ---
 
-# 29. MVP
+# 54. Core Backend Services
 
-The MVP should avoid integrating every feature simultaneously.
+ddu-api
 
-## MVP Inputs
+ddu-ingest
 
-Image
+ddu-evidence
 
-Username
+ddu-web-capture
 
-URL
+ddu-vision
 
----
+ddu-ocr
 
-## MVP Processing
+ddu-audio
 
-Grounded SAM 2
+ddu-geo
 
-PaddleOCR
+ddu-face
 
-GeoCLIP
+ddu-discovery
 
-Sherlock
+ddu-osint
 
-SpiderFoot
+ddu-collector
 
-gallery-dl
+ddu-resolution
 
----
+ddu-correlation
 
-## MVP Intelligence
+ddu-hypothesis
 
-Basic entity extraction
+ddu-belief
 
-Basic entity resolution
+ddu-contradiction
 
-Qdrant similarity
+ddu-frontier
 
-OpenSPG ontology
+ddu-interview
 
-Graph relationships
+ddu-ontology
 
-Evidence provenance
+ddu-graph
 
----
+ddu-vector
 
-## MVP Interface
+ddu-lineage
 
-Cytoscape.js graph
-
-MapLibre map
-
-Evidence viewer
-
-Investigation dashboard
+ddu-agent
 
 ---
 
-# 30. MVP Workflow A
+# 55. Security Model
 
-## Image Investigation
+Required:
 
-User uploads image.
+OIDC.
 
-DDU:
+RBAC.
 
-1. Stores original evidence.
-2. Extracts metadata.
-3. Runs Grounded SAM 2.
-4. Extracts text using PaddleOCR.
-5. Runs GeoCLIP.
-6. Embeds image and objects into Qdrant.
-7. Creates ontology entities.
-8. Generates candidate relationships.
-9. Displays entities in Cytoscape.
-10. Displays location candidates in MapLibre.
+Investigation-level ACL.
+
+Evidence permissions.
+
+Audit logs.
+
+Encryption.
+
+Secret management.
+
+Agent permission inheritance.
+
+Retention controls.
+
+All AI agents operate under the same permissions as the investigation context.
 
 ---
 
-# 31. MVP Workflow B
+# 56. MVP
 
-## Username Investigation
+The MVP should prove the investigation loop.
+
+Inputs:
+
+Image.
+
+Username.
+
+URL.
+
+User-provided description.
+
+Core tools:
+
+Grounded SAM 2.
+
+PaddleOCR.
+
+GeoCLIP.
+
+Sherlock.
+
+Browsertrix.
+
+SpiderFoot.
+
+Qdrant.
+
+Neo4j.
+
+Cytoscape.
+
+MapLibre.
+
+Core AI:
+
+Lead AI Detective.
+
+Hypothesis Engine.
+
+Simple Value-of-Information Planner.
+
+Correlation Engine.
+
+Interview Gap Agent.
+
+Contradiction Checker.
+
+---
+
+# 57. MVP Experience
 
 User enters username.
 
 DDU:
 
-1. Runs Sherlock.
-2. Creates CandidateAccount entities.
-3. Runs supported SpiderFoot enrichment.
-4. Routes supported public media sources to gallery-dl.
-5. Processes acquired media.
-6. Generates candidate identity relationships.
-7. Stores evidence.
-8. Displays account network.
+1. Creates hypotheses.
+2. Asks useful missing questions.
+3. Runs Sherlock.
+4. Captures candidate profiles.
+5. Extracts public media.
+6. Analyzes images.
+7. Generates location clues.
+8. Resolves candidate accounts.
+9. Builds graph.
+10. Searches for contradictions.
+11. Presents competing identity hypotheses.
+
+All results appear in real time.
 
 ---
 
-# 32. Phase 2
+# 58. Development Phases
 
-Add:
+## Phase 0
 
-* Video ingestion
-* Grounded SAM video tracking
-* MMDetection custom models
-* Whisper audio processing
-* Advanced multimodal entity resolution
-* Graphiti temporal intelligence
-* Timeline interface
-* Contradiction engine
-* Advanced social connectors
+Canonical data model.
 
----
+Evidence storage.
 
-# 33. Phase 3
-
-Add:
-
-* LangGraph autonomous investigation workflows
-* Investigation templates
-* Natural-language investigation queries
-* Collaborative investigations
-* Human verification workflows
-* Report generation
-* Graph snapshots
-* Investigation replay
-* Plugin SDK
-* Custom ontology builder
-* Air-gapped deployment
-
----
-
-# 34. Natural-Language Investigation
-
-Future DDU versions should support queries such as:
-
-"Show every account potentially connected to this username."
-
-"Find images containing vehicles visually similar to this one."
-
-"Which evidence connects these entities?"
-
-"Show all observations associated with Austin."
-
-"Show relationships with confidence below 70%."
-
-"What changed in this investigation during the last week?"
-
-"Which hypotheses currently have contradictory evidence?"
-
-The DDU query engine determines whether the question requires:
-
-Graph search
-
-Vector search
-
-Temporal search
-
-Geospatial search
-
-or
-
-Evidence retrieval.
-
----
-
-# 35. Security Architecture
-
-Required:
-
-RBAC
-
-Investigation-level access
-
-Source-level permissions
-
-Encryption at rest
-
-Encryption in transit
-
-Audit logs
-
-Secrets management
-
-Data retention policies
-
-Deletion workflows
-
-Agent permission inheritance
-
-Agents cannot automatically expand their own permissions.
-
----
-
-# 36. Privacy and Collection Controls
-
-DDU should implement explicit collection boundaries.
-
-Every connector should define:
-
-* Supported data sources
-* Access requirements
-* Collection permissions
-* Rate limits
-* Retention policy
-* Investigation scope
-
-The system should maintain separation between:
-
-Publicly discoverable data
-
-User-provided data
-
-Authenticated data
-
-Restricted data
-
-Agents should only access data permitted within the active investigation context.
-
----
-
-# 37. Product Differentiation
-
-DDU is not:
-
-An object detector.
-
-A username search tool.
-
-A geolocation model.
-
-An OSINT scanner.
-
-A graph database.
-
-A web scraper.
-
-The product is the integration of:
-
-**Multimodal Perception**
-
-*
-
-**OSINT Discovery**
-
-*
-
-**Automated Enrichment**
-
-*
-
-**Multimodal Entity Resolution**
-
-*
-
-**Vector Intelligence**
-
-*
-
-**Ontology**
-
-*
-
-**Temporal Knowledge**
-
-*
-
-**Evidence Provenance**
-
-*
-
-**Confidence-Aware Reasoning**
-
-*
-
-**Agentic Investigation**
-
-*
-
-**Human Investigation Workspace**
-
-The individual open-source projects provide capabilities.
-
-DDU provides the intelligence lifecycle connecting them.
-
----
-
-# 38. Core Proprietary Layer
-
-The strongest proprietary component should be:
-
-## DDU Intelligence Correlation Engine
-
-It answers:
-
-> Are these clues actually connected?
-
-Inputs:
-
-Visual similarity
-
-Semantic similarity
-
-Structured record similarity
-
-Username similarity
-
-Geographic compatibility
-
-Temporal compatibility
-
-Graph relationships
-
-Source reliability
-
-Independent corroboration
-
-Contradicting evidence
-
-Output:
-
-Candidate relationship
-
-*
-
-Confidence
-
-*
-
-Evidence paths
-
-Example:
-
-```text
-Account_17
-        │
-        │ POSSIBLY_BELONGS_TO
-        │ Confidence: 78%
-        ▼
-Person_4
-
-Evidence:
-├── Username similarity
-├── Shared geographic pattern
-├── Visually similar media
-└── Shared linked domain
-
-Contradiction:
-└── Different stated age
-```
-
-The investigator can inspect every supporting and contradicting path.
-
-This is the core difference between DDU and a collection of disconnected OSINT tools.
-
----
-
-# 39. Recommended Internal Service Architecture
-
-DDU should be modular.
-
-Recommended services:
-
-**ddu-api**
-
-Main application API.
-
-**ddu-ingest**
-
-File and URL ingestion.
-
-**ddu-vision**
-
-Grounded SAM 2 and MMDetection.
-
-**ddu-ocr**
-
-PaddleOCR.
-
-**ddu-audio**
-
-Whisper.
-
-**ddu-geo**
-
-GeoCLIP.
-
-**ddu-discovery**
-
-Sherlock.
-
-**ddu-osint**
-
-SpiderFoot integration.
-
-**ddu-collector**
-
-gallery-dl and future collectors.
-
-**ddu-resolution**
-
-Splink and multimodal entity resolution.
-
-**ddu-vector**
+Neo4j.
 
 Qdrant.
 
-**ddu-ontology**
+PostgreSQL.
 
-OpenSPG.
+Events.
 
-**ddu-temporal**
+---
+
+## Phase 1
+
+Living Graph UI.
+
+Image pipeline.
+
+GeoCLIP.
+
+OCR.
+
+Visual objects.
+
+---
+
+## Phase 2
+
+Sherlock.
+
+SpiderFoot.
+
+Browsertrix.
+
+gallery-dl.
+
+---
+
+## Phase 3
+
+Splink.
+
+CompreFace.
+
+Multimodal entity resolution.
+
+Correlation Engine.
+
+---
+
+## Phase 4
+
+Hypothesis Engine.
+
+Belief Engine.
+
+Contradiction Engine.
+
+---
+
+## Phase 5
+
+Value-of-Information Planner.
+
+Frontier management.
+
+Specialist agent team.
+
+---
+
+## Phase 6
+
+Interview Intelligence Engine.
+
+Memory elicitation.
+
+Gap analysis.
+
+Non-leading question generation.
+
+---
+
+## Phase 7
 
 Graphiti.
 
-**ddu-lineage**
+OpenSPG.
 
-OpenLineage integration.
+OpenLineage.
 
-**ddu-agent**
-
-LangGraph workflows.
-
-**ddu-ui**
-
-Cytoscape.js + MapLibre + Timeline.
+Investigation replay.
 
 ---
 
-# 40. Product Identity
+## Phase 8
 
-## DDU
+Strategy learning.
 
-**Digital Detective Unit**
+Historical investigation performance.
 
-Primary product line:
-
-> **Start with one clue.**
-
-Alternative descriptor:
-
-> **Multimodal Investigation and Intelligence Platform**
-
-The branding should feel like an operational system rather than a consumer AI assistant.
-
-The interface should communicate:
-
-Precision
-
-Evidence
-
-Control
-
-Correlation
-
-Investigation
-
-The system should visually emphasize the distinction between:
-
-Observed
-
-Inferred
-
-Confirmed
-
-Contradicted
-
-This distinction should become part of the DDU visual language.
+Adaptive tool selection.
 
 ---
 
-# 41. Success Criteria
+# 59. Core Differentiation
 
-DDU succeeds when an investigator can:
+DDU is not:
 
-1. Start with a single clue.
-2. Automatically extract relevant information.
-3. Discover related public entities.
-4. Analyze images, video, audio, and documents.
-5. Identify possible geographic context.
-6. Correlate observations across sources.
-7. Resolve candidate identities probabilistically.
-8. Explore relationships through a graph.
-9. Explore observations geographically.
-10. Understand changes over time.
-11. Trace every conclusion to evidence.
-12. Identify contradictory evidence.
-13. Automate repetitive investigation steps.
-14. Maintain human control over uncertain conclusions.
+An OSINT scraper.
+
+An AI search engine.
+
+A username finder.
+
+A geolocation tool.
+
+A graph visualization platform.
+
+A face matching system.
+
+DDU is:
+
+> A hypothesis-driven autonomous investigation system that determines what evidence it needs, selects the highest-value investigative action, correlates multimodal clues, searches actively for contradictions, learns from previous investigations, and presents the entire process as a living evidence graph.
+
+---
+
+# 60. Product Moat
+
+The moat is the combination of:
+
+**Hypothesis-Driven Reasoning**
+
+*
+
+**Value-of-Information Planning**
+
+*
+
+**Multimodal Correlation**
+
+*
+
+**Active Contradiction Search**
+
+*
+
+**Probabilistic Belief Updating**
+
+*
+
+**Evidence Dependency Graph**
+
+*
+
+**Investigation Strategy Learning**
+
+*
+
+**Human Memory Elicitation**
+
+*
+
+**Real-Time Investigation Visualization**
 
 The target experience is:
 
-> **One clue enters DDU. An evidence-backed intelligence graph emerges.**
+> The user provides one clue.
+> DDU decides what it needs to know.
+> DDU investigates.
+> The user watches the intelligence picture form in real time.
+> Every conclusion can be challenged and traced back to evidence.
+
+**Start with one clue. Build the evidence graph.**
