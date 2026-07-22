@@ -1,0 +1,128 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Protobuf contracts: lint + breaking-change check + stub generation
+  # ─────────────────────────────────────────────
+  contracts:
+    name: contracts (buf)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: libs/ddu-contracts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          buf_user: ${{ secrets.BUF_USER }}
+          buf_api_token: ${{ secrets.BUF_API_TOKEN }}
+        continue-on-error: true
+      - name: buf lint
+        run: buf lint
+      - name: buf breaking (against main)
+        run: buf breaking --against "https://github.com/${{ github.repository }}.git#branch=main,subdir=libs/ddu-contracts"
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+      - name: buf generate
+        run: buf generate
+
+  # ─────────────────────────────────────────────
+  # Go: lint + build + vet for every Go service and lib
+  # ─────────────────────────────────────────────
+  go:
+    name: go (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - libs/ddu-lineage-emitter
+          - libs/ddu-evidence
+          - services/ddu-api
+          - services/ddu-ingest
+          - services/ddu-storage
+          - services/ddu-graph-store
+          - services/ddu-vector
+          - services/ddu-lineage
+          - services/ddu-webcapture
+          - services/ddu-collector
+          - services/ddu-discovery
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: false
+      - name: go mod download
+        run: go mod download
+      - name: go vet
+        run: go vet ./...
+      - name: go build
+        run: go build ./...
+      - name: go test
+        run: go test ./... -count=1
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.60
+          working-directory: ${{ matrix.module }}
+          args: --timeout=5m
+
+  # ─────────────────────────────────────────────
+  # Python: install + import smoke for every Python service and common lib
+  # ─────────────────────────────────────────────
+  python:
+    name: python (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - libs/ddu-py-common
+          - services/ddu-vision
+          - services/ddu-face
+          - services/ddu-ocr
+          - services/ddu-audio
+          - services/ddu-geo
+          - services/ddu-resolution
+          - services/ddu-ontology
+          - services/ddu-temporal
+          - services/ddu-agent
+          - services/ddu-osint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: install ddu-py-common
+        run: pip install -e libs/ddu-py-common
+      - name: install ${{ matrix.module }}
+        run: pip install -e ${{ matrix.module }}
+        if: matrix.module != 'libs/ddu-py-common'
+      - name: import smoke
+        run: |
+          python -c "import sys; sys.path.insert(0, '${{ matrix.module }}'); import app; print('${{ matrix.module }} ok')"
+        if: startsWith(matrix.module, 'services/')
+      - name: ruff
+        if: false  # enable once ruff config lands
+        run: pip install ruff && ruff check ${{ matrix.module }}
+
+  # ─────────────────────────────────────────────
+  # Docker compose: validate stack file syntax (no container startup yet)
+  # ─────────────────────────────────────────────
+  compose-validate:
+    name: docker-compose validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: validate compose file
+        run: docker compose -f infra/docker-compose.yml config --quiet

@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ddu-resolution"
+version = "0.0.1"
+description = "DDU ddu-resolution service"
+requires-python = ">=3.11"
+dependencies = [
+    "ddu-py-common",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.30",
+]
+
+[tool.setuptools]
+py-modules = ["app"]

@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package ddu.contracts.v1;
+
+option go_package = "github.com/ddu/ddu-contracts/go/dducontractsv1";
+option java_package = "io.ddu.contracts.v1";
+option java_multiple_files = true;
+
+// DDU service identification. Every service exposes /versionz returning this.
+// Reported alongside every OpenLineage event as a job facet.
+message ServiceVersion {
+  string service = 1;          // e.g. "ddu-vision"
+  string service_version = 2;  // semantic version of the DDU service
+  string tool = 3;             // upstream tool, e.g. "grounded-sam-2"
+  string tool_version = 4;     // upstream tool version
+  string model = 5;            // model identifier, empty for non-ML services
+  string model_version = 6;    // model weights version
+  string git_commit = 7;       // build commit
+  string built_at = 8;         // RFC3339 build timestamp
+}
+
+// Empty request for health/version probes.
+message Empty {}
+
+// Health probe response.
+message HealthStatus {
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    STATE_HEALTHY = 1;
+    STATE_DEGRADED = 2;
+    STATE_UNHEALTHY = 3;
+  }
+  State state = 1;
+  string message = 2;
+  repeated DependencyCheck dependencies = 3;
+}
+
+message DependencyCheck {
+  string name = 1;             // e.g. "neo4j", "qdrant", "minio"
+  bool ok = 2;
+  string detail = 3;           // error message or latency
+}

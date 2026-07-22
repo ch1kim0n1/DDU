@@ -1,0 +1,251 @@
+"use client";
+
+import type {DOMRenderProps} from "../../utils/dom";
+import type {TabsVariants} from "@heroui/styles";
+import type {ComponentPropsWithRef, ReactNode} from "react";
+
+import {tabsVariants} from "@heroui/styles";
+import React, {createContext, use, useRef} from "react";
+import {SelectionIndicator as SelectionIndicatorPrimitive} from "react-aria-components/SelectionIndicator";
+import {
+  TabList as TabListPrimitive,
+  TabPanel as TabPanelPrimitive,
+  Tab as TabPrimitive,
+  Tabs as TabsPrimitive,
+} from "react-aria-components/Tabs";
+
+import {composeSlotClassName, composeTwRenderProps} from "../../utils/compose";
+import {dom} from "../../utils/dom";
+import {IconChevronDown, IconChevronLeft, IconChevronRight, IconChevronUp} from "../icons";
+import {ScrollShadow} from "../scroll-shadow";
+
+/* -------------------------------------------------------------------------------------------------
+ * Tabs Context
+ * -----------------------------------------------------------------------------------------------*/
+type TabsContext = {
+  orientation?: "horizontal" | "vertical";
+  slots?: ReturnType<typeof tabsVariants>;
+};
+
+const TabsContext = createContext<TabsContext>({});
+
+/* -------------------------------------------------------------------------------------------------
+ * Tabs Root
+ * -----------------------------------------------------------------------------------------------*/
+interface TabsRootProps extends ComponentPropsWithRef<typeof TabsPrimitive>, TabsVariants {
+  children: React.ReactNode;
+  className?: string;
+}
+
+const TabsRoot = ({
+  children,
+  className,
+  orientation = "horizontal",
+  variant,
+  ...props
+}: TabsRootProps) => {
+  const slots = React.useMemo(() => tabsVariants({variant}), [variant]);
+
+  return (
+    <TabsContext value={{orientation, slots}}>
+      <TabsPrimitive
+        {...props}
+        className={composeTwRenderProps(className, slots.base())}
+        data-slot="tabs"
+        orientation={orientation}
+      >
+        {children}
+      </TabsPrimitive>
+    </TabsContext>
+  );
+};
+
+/* -------------------------------------------------------------------------------------------------
+ * Tabs List Container
+ * -----------------------------------------------------------------------------------------------*/
+interface TabListContainerProps<
+  E extends keyof React.JSX.IntrinsicElements = "div",
+> extends DOMRenderProps<E, undefined> {
+  children?: ReactNode;
+  className?: string;
+}
+
+const TabListContainer = <E extends keyof React.JSX.IntrinsicElements = "div">({
+  children,
+  className,
+  ...props
+}: TabListContainerProps<E> &
+  Omit<React.JSX.IntrinsicElements[E], keyof TabListContainerProps<E>>) => {
+  const {orientation = "horizontal", slots} = use(TabsContext);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const isVertical = orientation === "vertical";
+
+  const scrollBy = (direction: 1 | -1) => {
+    const el = scrollerRef.current;
+
+    if (!el) return;
+    const size = isVertical ? el.clientHeight : el.clientWidth;
+
+    el.scrollBy({behavior: "smooth", [isVertical ? "top" : "left"]: direction * size * 0.8});
+  };
+
+  return (
+    <dom.div
+      className={composeSlotClassName(slots?.tabListContainer, className)}
+      data-slot="tabs-list-container"
+      {...(props as any)}
+    >
+      <ScrollShadow
+        ref={scrollerRef}
+        hideScrollBar
+        className={composeSlotClassName(slots?.scroller)}
+        orientation={orientation}
+        size={64}
+      >
+        {children}
+      </ScrollShadow>
+      <button
+        aria-label={isVertical ? "Scroll tabs up" : "Scroll tabs left"}
+        className={composeSlotClassName(slots?.scrollPrev)}
+        tabIndex={-1}
+        type="button"
+        onClick={() => scrollBy(-1)}
+      >
+        {isVertical ? <IconChevronUp /> : <IconChevronLeft />}
+      </button>
+      <button
+        aria-label={isVertical ? "Scroll tabs down" : "Scroll tabs right"}
+        className={composeSlotClassName(slots?.scrollNext)}
+        tabIndex={-1}
+        type="button"
+        onClick={() => scrollBy(1)}
+      >
+        {isVertical ? <IconChevronDown /> : <IconChevronRight />}
+      </button>
+    </dom.div>
+  );
+};
+
+/* -------------------------------------------------------------------------------------------------
+ * Tabs List
+ * -----------------------------------------------------------------------------------------------*/
+interface TabListProps extends ComponentPropsWithRef<typeof TabListPrimitive<object>> {
+  children: React.ReactNode;
+  className?: string;
+}
+
+const TabList = ({children, className, ...props}: TabListProps) => {
+  const {slots} = use(TabsContext);
+
+  return (
+    <TabListPrimitive
+      {...props}
+      className={composeTwRenderProps(className, slots?.tabList())}
+      data-slot="tabs-list"
+    >
+      {children}
+    </TabListPrimitive>
+  );
+};
+
+/* -------------------------------------------------------------------------------------------------
+ * Tab
+ * -----------------------------------------------------------------------------------------------*/
+interface TabProps extends ComponentPropsWithRef<typeof TabPrimitive> {
+  className?: string;
+}
+
+const Tab = ({children, className, ...props}: TabProps) => {
+  const {slots} = use(TabsContext);
+
+  return (
+    <TabPrimitive
+      {...props}
+      className={composeTwRenderProps(className, slots?.tab())}
+      data-slot="tabs-tab"
+    >
+      {children}
+    </TabPrimitive>
+  );
+};
+
+/* -------------------------------------------------------------------------------------------------
+ * Tab Indicator
+ * -----------------------------------------------------------------------------------------------*/
+interface TabIndicatorProps extends ComponentPropsWithRef<typeof SelectionIndicatorPrimitive> {
+  className?: string;
+}
+
+const TabIndicator = ({className, ...props}: TabIndicatorProps) => {
+  const {slots} = use(TabsContext);
+
+  return (
+    <SelectionIndicatorPrimitive
+      className={composeSlotClassName(slots?.tabIndicator, className)}
+      data-slot="tabs-indicator"
+      {...props}
+    />
+  );
+};
+
+/* -------------------------------------------------------------------------------------------------
+ * Tab Panel
+ * -----------------------------------------------------------------------------------------------*/
+interface TabPanelProps extends Omit<ComponentPropsWithRef<typeof TabPanelPrimitive>, "children"> {
+  children: React.ReactNode;
+  className?: string;
+}
+
+const TabPanel = ({children, className, ...props}: TabPanelProps) => {
+  const {slots} = use(TabsContext);
+
+  return (
+    <TabPanelPrimitive
+      {...props}
+      className={composeTwRenderProps(className, slots?.tabPanel())}
+      data-slot="tabs-panel"
+    >
+      {children}
+    </TabPanelPrimitive>
+  );
+};
+
+/* -------------------------------------------------------------------------------------------------
+ * Tab Separator
+ * -----------------------------------------------------------------------------------------------*/
+interface TabSeparatorProps<
+  E extends keyof React.JSX.IntrinsicElements = "span",
+> extends DOMRenderProps<E, undefined> {
+  className?: string;
+}
+
+const TabSeparator = <E extends keyof React.JSX.IntrinsicElements = "span">({
+  className,
+  ...props
+}: TabSeparatorProps<E> & Omit<React.JSX.IntrinsicElements[E], keyof TabSeparatorProps<E>>) => {
+  const {slots} = use(TabsContext);
+
+  return (
+    <dom.span
+      aria-hidden="true"
+      className={composeSlotClassName(slots?.separator, className)}
+      data-slot="tabs-separator"
+      {...(props as any)}
+    />
+  );
+};
+
+/* -------------------------------------------------------------------------------------------------
+ * Exports
+ * -----------------------------------------------------------------------------------------------*/
+export {TabsRoot, TabListContainer, TabList, Tab, TabIndicator, TabPanel, TabSeparator};
+
+export type {
+  TabsRootProps,
+  TabListContainerProps,
+  TabListProps,
+  TabProps,
+  TabIndicatorProps,
+  TabPanelProps,
+  TabSeparatorProps,
+};
