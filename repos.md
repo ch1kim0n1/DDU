@@ -1,0 +1,16 @@
+
+https://github.com/VicenteVivan/geo-clip.git
+https://github.com/smicallef/spiderfoot
+https://github.com/sherlock-project/sherlock.git
+https://github.com/maplibre/maplibre-gl-js.git
+https://github.com/getzep/graphiti.git
+https://github.com/langchain-ai/langgraph.git
+https://github.com/OpenSPG/openspg
+https://github.com/OpenLineage/OpenLineage.git
+https://github.com/qdrant/qdrant.git
+https://github.com/moj-analytical-services/splink.git
+https://github.com/PaddlePaddle/PaddleOCR.git
+https://github.com/cytoscape/cytoscape.js.git
+https://github.com/open-mmlab/mmdetection.git
+https://github.com/IDEA-Research/Grounded-SAM-2.git
+https://github.com/mikf/gallery-dl.git
