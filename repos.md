@@ -14,3 +14,7 @@ https://github.com/cytoscape/cytoscape.js.git
 https://github.com/open-mmlab/mmdetection.git
 https://github.com/IDEA-Research/Grounded-SAM-2.git
 https://github.com/mikf/gallery-dl.git
+https://github.com/exadel-inc/CompreFace.git
+https://github.com/neo4j/neo4j.git
+https://github.com/exadel-inc/CompreFace.git
+https://github.com/webrecorder/browsertrix-crawler.git
