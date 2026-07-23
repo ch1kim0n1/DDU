@@ -192,6 +192,34 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  intel: (
+    id: string,
+    featurePath: string,
+    body: Record<string, unknown> = {},
+  ) =>
+    request(`/v1/investigations/${encodeURIComponent(id)}/intel/${featurePath}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-DDU-Authorization-Purpose": "authorized-investigation",
+      },
+      body: JSON.stringify({
+        authorization_purpose: "authorized-investigation",
+        subject: body.subject || "subject",
+        ...body,
+      }),
+    }),
+
+  intelScene: (id: string) =>
+    request<{nodes: Array<{id: string; label?: string; type?: string; x: number; y: number; z: number; confidence?: number}>; edges: Array<{id: string; source: string; target: string; type?: string; confidence?: number}>}>(
+      `/v1/investigations/${encodeURIComponent(id)}/intel/scene/3d`,
+    ),
+
+  intelPlayback: (id: string) =>
+    request<{frames: Array<{frame: number; narrative?: string; entity_count?: number; relationship_count?: number}>}>(
+      `/v1/investigations/${encodeURIComponent(id)}/intel/playback`,
+    ),
+
   listEntities: async (id: string) =>
     (
       await request<{entities: Entity[]}>(

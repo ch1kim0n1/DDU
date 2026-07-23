@@ -30,6 +30,7 @@ type serviceURLs struct {
 	Agent       string
 	Ontology    string
 	Vector      string
+	Intel       string
 }
 
 type downstreamClient struct {
@@ -452,6 +453,37 @@ func (c *downstreamClient) upsertVectors(
 		return err
 	}
 	return c.doJSON(req, nil)
+}
+
+func (c *downstreamClient) intelPOST(
+	ctx context.Context,
+	endpoint string,
+	payload map[string]any,
+) (map[string]any, error) {
+	req, err := jsonRequest(ctx, http.MethodPost, strings.TrimRight(c.urls.Intel, "/")+endpoint, payload)
+	if err != nil {
+		return nil, err
+	}
+	var body map[string]any
+	err = c.doJSON(req, &body)
+	return body, err
+}
+
+func (c *downstreamClient) intelGET(
+	ctx context.Context,
+	endpoint, investigationID string,
+) (map[string]any, error) {
+	target := strings.TrimRight(c.urls.Intel, "/") + endpoint
+	if investigationID != "" {
+		target += "?investigation_id=" + url.QueryEscape(investigationID)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, err
+	}
+	var body map[string]any
+	err = c.doJSON(req, &body)
+	return body, err
 }
 
 func (c *downstreamClient) listOntologyTypes(

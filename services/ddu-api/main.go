@@ -62,6 +62,7 @@ func main() {
 		Agent:      lookupEnv("DDU_AGENT_URL", "http://localhost:8109"),
 		Ontology:   lookupEnv("DDU_ONTOLOGY_URL", "http://localhost:8107"),
 		Vector:     lookupEnv("DDU_VECTOR_URL", "http://localhost:8005"),
+		Intel:      lookupEnv("DDU_INTEL_URL", "http://localhost:8112"),
 	}
 	lineage, err := lineageemitter.New(versionInfo())
 	if err != nil {

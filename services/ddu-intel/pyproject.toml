@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools==80.9.0", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ddu-intel"
+version = "0.0.1"
+description = "DDU post-MVP temporal / relational / geospatial intelligence service"
+requires-python = ">=3.11"
+dependencies = [
+    "ddu-py-common==0.0.1",
+    "fastapi==0.136.3",
+    "httpx==0.28.1",
+    "pydantic==2.13.4",
+    "uvicorn[standard]==0.44.0",
+]
+
+[tool.setuptools]
+py-modules = ["app"]

@@ -181,6 +181,43 @@ func TestRBACInvestigatorPOSTAllowed(t *testing.T) {
 	}
 }
 
+func TestIntelHighRiskRequiresAuthorizationPurpose(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/healthz":
+			_ = json.NewEncoder(w).Encode(map[string]string{"state": "HEALTHY"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer backend.Close()
+	config := serviceURLs{
+		Ingest: backend.URL, Vision: backend.URL, OCR: backend.URL,
+		Geo: backend.URL, GraphStore: backend.URL, Lineage: backend.URL,
+		Storage: backend.URL, Intel: backend.URL,
+	}
+	handler := newHandler(config, backend.Client(), nil)
+	createReq := httptest.NewRequest(http.MethodPost, "/v1/investigations", bytes.NewBufferString(`{"name":"Intel"}`))
+	createReq.Header.Set("X-DDU-Role", RoleAnalyst)
+	createRec := httptest.NewRecorder()
+	handler.ServeHTTP(createRec, createReq)
+	var investigation Investigation
+	_ = json.NewDecoder(createRec.Body).Decode(&investigation)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/v1/investigations/"+investigation.ID+"/intel/household",
+		bytes.NewBufferString(`{"subject":"alice"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-DDU-Role", RoleAnalyst)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestUsernameWorkflow(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {

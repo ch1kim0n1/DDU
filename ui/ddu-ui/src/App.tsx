@@ -18,6 +18,7 @@ import {
 } from "./api";
 import {GraphView} from "./GraphView";
 import {MapView} from "./MapView";
+import {Scene3D} from "./Scene3D";
 import {TimelineView} from "./TimelineView";
 
 function navigate(path: string) {
@@ -190,7 +191,10 @@ function InvestigationPage({id}: {id: string}) {
   const [sourceURL, setSourceURL] = useState("");
   const [typeName, setTypeName] = useState("");
   const [customTypes, setCustomTypes] = useState<string[]>([]);
-  const [tab, setTab] = useState<"graph" | "map" | "timeline" | "list">("graph");
+  const [tab, setTab] = useState<"graph" | "map" | "timeline" | "intel" | "scene" | "list">("graph");
+  const [intelLog, setIntelLog] = useState<string>("");
+  const [scene, setScene] = useState<{nodes: Array<{id: string; label?: string; type?: string; x: number; y: number; z: number; confidence?: number}>; edges: Array<{id: string; source: string; target: string; confidence?: number}>}>({nodes: [], edges: []});
+  const [playback, setPlayback] = useState<Array<{frame: number; narrative?: string}>>([]);
 
   const load = useCallback(async () => {
     try {
@@ -202,6 +206,7 @@ function InvestigationPage({id}: {id: string}) {
         evidenceData,
         relationshipData,
         timelineData,
+        ontologyData,
       ] = await Promise.all([
         api.getInvestigation(id),
         api.listEntities(id),
@@ -221,8 +226,8 @@ function InvestigationPage({id}: {id: string}) {
       setTimeline(timelineData);
       setCustomTypes(
         (ontologyData.entity_types || [])
-          .filter((item) => item.custom)
-          .map((item) => item.name),
+          .filter((item: {custom?: boolean}) => item.custom)
+          .map((item: {name: string}) => item.name),
       );
       setError("");
     } catch (reason) {
@@ -417,6 +422,32 @@ function InvestigationPage({id}: {id: string}) {
         </button>
         <button
           role="tab"
+          aria-selected={tab === "intel"}
+          className={tab === "intel" ? "active" : ""}
+          onClick={() => setTab("intel")}
+        >
+          Intel
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === "scene"}
+          className={tab === "scene" ? "active" : ""}
+          onClick={() => {
+            setTab("scene");
+            void runAction("scene", async () => {
+              const [sceneData, playbackData] = await Promise.all([
+                api.intelScene(id),
+                api.intelPlayback(id),
+              ]);
+              setScene({nodes: sceneData.nodes || [], edges: sceneData.edges || []});
+              setPlayback(playbackData.frames || []);
+            });
+          }}
+        >
+          3D / Playback
+        </button>
+        <button
+          role="tab"
           aria-selected={tab === "list"}
           className={tab === "list" ? "active" : ""}
           onClick={() => setTab("list")}
@@ -444,6 +475,74 @@ function InvestigationPage({id}: {id: string}) {
       {tab === "timeline" && (
         <section className="tab-panel timeline-panel">
           <TimelineView events={timeline} />
+        </section>
+      )}
+
+      {tab === "intel" && (
+        <section className="tab-panel intel-panel">
+          <div className="intel-actions">
+            {[
+              ["identity/resolve", "Identity resolve"],
+              ["aliases", "Aliases"],
+              ["social-circle", "Social circle"],
+              ["household", "Household"],
+              ["property", "Property records"],
+              ["records/fuse", "Public-record fusion"],
+              ["employment", "Employment graph"],
+              ["location/current", "Current location"],
+              ["location/history", "Location history"],
+              ["location/fuse", "Location fusion"],
+              ["pattern-of-life", "Pattern of life"],
+              ["life-events", "Life events"],
+              ["relationship/strength", "Relationship strength"],
+              ["temporal/diff", "Temporal diff"],
+              ["assets", "Assets"],
+            ].map(([path, label]) => (
+              <button
+                disabled={Boolean(busy)}
+                key={path}
+                onClick={() =>
+                  void runAction(path, async () => {
+                    const result = await api.intel(id, path, {subject: investigation?.name || "subject"});
+                    setIntelLog(JSON.stringify(result, null, 2));
+                  })
+                }
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
+            <button
+              disabled={Boolean(busy)}
+              onClick={() =>
+                void runAction("web-history", async () => {
+                  const result = await api.intel(id, "web-history", {
+                    subject: investigation?.name || "subject",
+                    url: "https://example.com/profile",
+                  });
+                  setIntelLog(JSON.stringify(result, null, 2));
+                })
+              }
+              type="button"
+            >
+              Web history / deleted content
+            </button>
+          </div>
+          <pre className="intel-log">{intelLog || "Run a post-MVP intel capability to inspect hypotheses."}</pre>
+        </section>
+      )}
+
+      {tab === "scene" && (
+        <section className="tab-panel scene-panel">
+          <Scene3D edges={scene.edges} nodes={scene.nodes} />
+          <ol className="playback-list">
+            {playback.map((frame) => (
+              <li key={frame.frame}>
+                <strong>Frame {frame.frame}</strong>
+                <span>{frame.narrative}</span>
+              </li>
+            ))}
+          </ol>
         </section>
       )}
 

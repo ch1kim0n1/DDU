@@ -71,6 +71,25 @@ func newHandler(urls serviceURLs, client *http.Client, lineage lineageEmitter) h
 	router.Get("/v1/plugins", s.pluginCatalog)
 	router.Get("/v1/ontology/types", s.listOntologyTypes)
 	router.Post("/v1/investigations/{id}/ontology/types", s.createOntologyType)
+	router.Get("/v1/intel/capabilities", s.intelCapabilities)
+	router.Post("/v1/investigations/{id}/intel/location/current", s.intelProxy("location/current", "/v1/location/current"))
+	router.Post("/v1/investigations/{id}/intel/household", s.intelProxy("household", "/v1/household"))
+	router.Post("/v1/investigations/{id}/intel/property", s.intelProxy("property", "/v1/property"))
+	router.Post("/v1/investigations/{id}/intel/identity/resolve", s.intelProxy("identity/resolve", "/v1/identity/resolve"))
+	router.Post("/v1/investigations/{id}/intel/pattern-of-life", s.intelProxy("pattern-of-life", "/v1/pattern-of-life"))
+	router.Post("/v1/investigations/{id}/intel/temporal/diff", s.intelProxy("temporal/diff", "/v1/temporal/diff"))
+	router.Post("/v1/investigations/{id}/intel/social-circle", s.intelProxy("social-circle", "/v1/social-circle"))
+	router.Post("/v1/investigations/{id}/intel/location/history", s.intelProxy("location/history", "/v1/location/history"))
+	router.Post("/v1/investigations/{id}/intel/aliases", s.intelProxy("aliases", "/v1/aliases"))
+	router.Post("/v1/investigations/{id}/intel/records/fuse", s.intelProxy("records/fuse", "/v1/records/fuse"))
+	router.Post("/v1/investigations/{id}/intel/relationship/strength", s.intelProxy("relationship/strength", "/v1/relationship/strength"))
+	router.Post("/v1/investigations/{id}/intel/life-events", s.intelProxy("life-events", "/v1/life-events"))
+	router.Post("/v1/investigations/{id}/intel/employment", s.intelProxy("employment", "/v1/employment"))
+	router.Post("/v1/investigations/{id}/intel/assets", s.intelProxy("assets", "/v1/assets"))
+	router.Post("/v1/investigations/{id}/intel/web-history", s.intelProxy("web-history", "/v1/web-history"))
+	router.Post("/v1/investigations/{id}/intel/location/fuse", s.intelProxy("location/fuse", "/v1/location/fuse"))
+	router.Get("/v1/investigations/{id}/intel/scene/3d", s.intelGET("scene/3d", "/v1/scene/3d"))
+	router.Get("/v1/investigations/{id}/intel/playback", s.intelGET("playback", "/v1/playback"))
 	return router
 }
 
@@ -95,6 +114,7 @@ func (s *apiServer) healthz(w http.ResponseWriter, r *http.Request) {
 		"ddu-audio":      s.downstream.urls.Audio,
 		"ddu-temporal":   s.downstream.urls.Temporal,
 		"ddu-vector":     s.downstream.urls.Vector,
+		"ddu-intel":      s.downstream.urls.Intel,
 	}
 	dependencies := map[string]string{}
 	for name, baseURL := range required {
@@ -432,7 +452,7 @@ func investigationFacet(investigationID string) map[string]string {
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Investigation-Id, X-DDU-Role")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Investigation-Id, X-DDU-Role, X-DDU-Authorization-Purpose")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

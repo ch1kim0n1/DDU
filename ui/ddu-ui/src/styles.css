@@ -743,6 +743,49 @@ footer {
   }
 }
 
+.intel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.intel-actions button {
+  border: 1px solid var(--ink);
+  background: #fff;
+  color: var(--ink);
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.intel-log {
+  max-height: 420px;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid rgba(17, 25, 24, 0.16);
+  background: #111918;
+  color: #f4f1e8;
+  font-size: 12px;
+}
+
+.scene3d-controls {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.scene3d-canvas {
+  width: 100%;
+  min-height: 320px;
+  border: 1px solid rgba(17, 25, 24, 0.16);
+  background: linear-gradient(180deg, #f4f1e8, #e8e5da);
+}
+
+.playback-list {
+  margin-top: 16px;
+  padding-left: 18px;
+}
+
 .tab-bar {
   display: flex;
   gap: 0;
