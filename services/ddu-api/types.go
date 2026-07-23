@@ -1,9 +1,16 @@
 package main
 
+type InvestigationMember struct {
+	UserID  string `json:"user_id"`
+	Role    string `json:"role"`
+	AddedAt string `json:"added_at,omitempty"`
+}
+
 type Investigation struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	CreatedAt string `json:"created_at"`
+	ID        string                 `json:"id"`
+	Name      string                 `json:"name"`
+	CreatedAt string                 `json:"created_at"`
+	Members   []InvestigationMember  `json:"members,omitempty"`
 }
 
 type InvestigationList struct {
@@ -68,4 +75,48 @@ type WorkflowResult struct {
 type RunsResponse struct {
 	Runs  []map[string]any `json:"runs"`
 	Count int              `json:"count"`
+}
+
+type Confidence struct {
+	Value                  float32            `json:"value"`
+	SupportingSignals      []string           `json:"supporting_signals,omitempty"`
+	ContradictingSignals   []string           `json:"contradicting_signals,omitempty"`
+	IndependentSourceCount int32              `json:"independent_source_count,omitempty"`
+	ComputedBy             string             `json:"computed_by,omitempty"`
+	ComputedAt             string             `json:"computed_at,omitempty"`
+	SignalWeights          map[string]float32 `json:"signal_weights,omitempty"`
+}
+
+type Relationship struct {
+	ID                      string         `json:"id"`
+	InvestigationID         string         `json:"investigation_id"`
+	SourceEntityID          string         `json:"source_entity_id"`
+	TargetEntityID          string         `json:"target_entity_id"`
+	RelationshipType        string         `json:"relationship_type"`
+	VerificationState       string         `json:"verification_state"`
+	Confidence              Confidence     `json:"confidence"`
+	EvidenceIDs             []string       `json:"evidence_ids"`
+	CandidateRelationshipID string         `json:"candidate_relationship_id,omitempty"`
+	Provenance              map[string]any `json:"provenance"`
+	CreatedAt               string         `json:"created_at"`
+	UpdatedAt               string         `json:"updated_at"`
+}
+
+type RelationshipList struct {
+	Relationships []Relationship `json:"relationships"`
+	NextPageToken string         `json:"next_page_token,omitempty"`
+}
+
+type CandidateRelationship struct {
+	ID                string         `json:"id"`
+	InvestigationID   string         `json:"investigation_id"`
+	SourceEntityID    string         `json:"source_entity_id"`
+	TargetEntityID    string         `json:"target_entity_id"`
+	RelationshipType  string         `json:"relationship_type"`
+	Confidence        Confidence     `json:"confidence"`
+	Signal            string         `json:"signal,omitempty"`
+	VerificationState string         `json:"verification_state"`
+	EvidenceIDs       []string       `json:"evidence_ids"`
+	Provenance        map[string]any `json:"provenance"`
+	CreatedAt         string         `json:"created_at"`
 }

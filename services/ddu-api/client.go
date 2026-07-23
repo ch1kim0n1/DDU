@@ -12,13 +12,24 @@ import (
 )
 
 type serviceURLs struct {
-	Ingest     string
-	Vision     string
-	OCR        string
-	Geo        string
-	GraphStore string
-	Lineage    string
-	Storage    string
+	Ingest      string
+	Vision      string
+	OCR         string
+	Geo         string
+	Face        string
+	Audio       string
+	Temporal    string
+	GraphStore  string
+	Lineage     string
+	Storage     string
+	Discovery   string
+	OSINT       string
+	Collector   string
+	Webcapture  string
+	Resolution  string
+	Agent       string
+	Ontology    string
+	Vector      string
 }
 
 type downstreamClient struct {
@@ -168,6 +179,289 @@ func (c *downstreamClient) listRuns(
 	var runs RunsResponse
 	err = c.doJSON(req, &runs)
 	return runs, err
+}
+
+func (c *downstreamClient) listRelationships(
+	ctx context.Context,
+	investigationID string,
+) (RelationshipList, error) {
+	query := url.Values{"investigation_id": []string{investigationID}}
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		strings.TrimRight(c.urls.GraphStore, "/")+"/v1/relationships?"+query.Encode(),
+		nil,
+	)
+	if err != nil {
+		return RelationshipList{}, err
+	}
+	var relationships RelationshipList
+	err = c.doJSON(req, &relationships)
+	return relationships, err
+}
+
+func (c *downstreamClient) createRelationship(
+	ctx context.Context,
+	relationship Relationship,
+) (Relationship, error) {
+	req, err := jsonRequest(
+		ctx,
+		http.MethodPost,
+		strings.TrimRight(c.urls.GraphStore, "/")+"/v1/relationships",
+		relationship,
+	)
+	if err != nil {
+		return Relationship{}, err
+	}
+	var created Relationship
+	err = c.doJSON(req, &created)
+	return created, err
+}
+
+func (c *downstreamClient) updateRelationshipVerification(
+	ctx context.Context,
+	relationshipID, state, actor string,
+) (Relationship, error) {
+	req, err := jsonRequest(
+		ctx,
+		http.MethodPatch,
+		strings.TrimRight(c.urls.GraphStore, "/")+"/v1/relationships/"+url.PathEscape(relationshipID)+"/verification",
+		map[string]string{"verification_state": state, "verified_by": actor},
+	)
+	if err != nil {
+		return Relationship{}, err
+	}
+	var updated Relationship
+	err = c.doJSON(req, &updated)
+	return updated, err
+}
+
+func (c *downstreamClient) discoverUsername(
+	ctx context.Context,
+	investigationID, username string,
+	sites []string,
+) ([]Observation, error) {
+	payload := map[string]any{
+		"investigation_id": investigationID,
+		"username":         username,
+		"sites":            sites,
+	}
+	req, err := jsonRequest(ctx, http.MethodPost, strings.TrimRight(c.urls.Discovery, "/")+"/v1/discover", payload)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Observations []Observation `json:"observations"`
+	}
+	if err := c.doJSON(req, &response); err != nil {
+		return nil, err
+	}
+	return response.Observations, nil
+}
+
+func (c *downstreamClient) enrichOSINT(
+	ctx context.Context,
+	investigationID, target string,
+	modules []string,
+) ([]Observation, error) {
+	payload := map[string]any{
+		"investigation_id": investigationID,
+		"target":           target,
+		"modules":          modules,
+	}
+	req, err := jsonRequest(ctx, http.MethodPost, strings.TrimRight(c.urls.OSINT, "/")+"/v1/enrich", payload)
+	if err != nil {
+		return nil, err
+	}
+	var observations []Observation
+	err = c.doJSON(req, &observations)
+	return observations, err
+}
+
+func (c *downstreamClient) collectURL(
+	ctx context.Context,
+	investigationID, sourceURL string,
+) ([]Evidence, error) {
+	payload := map[string]any{
+		"investigation_id": investigationID,
+		"url":              sourceURL,
+	}
+	req, err := jsonRequest(ctx, http.MethodPost, strings.TrimRight(c.urls.Collector, "/")+"/v1/collect", payload)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Evidence []Evidence `json:"evidence"`
+	}
+	if err := c.doJSON(req, &response); err != nil {
+		return nil, err
+	}
+	return response.Evidence, nil
+}
+
+func (c *downstreamClient) captureURL(
+	ctx context.Context,
+	investigationID, sourceURL string,
+) (Evidence, error) {
+	payload := map[string]any{
+		"investigation_id": investigationID,
+		"url":              sourceURL,
+	}
+	req, err := jsonRequest(ctx, http.MethodPost, strings.TrimRight(c.urls.Webcapture, "/")+"/v1/capture", payload)
+	if err != nil {
+		return Evidence{}, err
+	}
+	var response struct {
+		Evidence Evidence `json:"evidence"`
+	}
+	if err := c.doJSON(req, &response); err != nil {
+		return Evidence{}, err
+	}
+	return response.Evidence, nil
+}
+
+func (c *downstreamClient) resolveEntities(
+	ctx context.Context,
+	investigationID string,
+	entityIDs []string,
+	threshold float64,
+) ([]CandidateRelationship, error) {
+	payload := map[string]any{
+		"investigation_id": investigationID,
+		"entity_ids":       entityIDs,
+		"threshold":        threshold,
+	}
+	req, err := jsonRequest(ctx, http.MethodPost, strings.TrimRight(c.urls.Resolution, "/")+"/v1/resolve", payload)
+	if err != nil {
+		return nil, err
+	}
+	var candidates []CandidateRelationship
+	err = c.doJSON(req, &candidates)
+	return candidates, err
+}
+
+func (c *downstreamClient) contradict(
+	ctx context.Context,
+	investigationID string,
+) ([]map[string]any, error) {
+	payload := map[string]any{"investigation_id": investigationID}
+	req, err := jsonRequest(ctx, http.MethodPost, strings.TrimRight(c.urls.Resolution, "/")+"/v1/contradict", payload)
+	if err != nil {
+		return nil, err
+	}
+	var contradictions []map[string]any
+	err = c.doJSON(req, &contradictions)
+	return contradictions, err
+}
+
+func (c *downstreamClient) runAgentWorkflow(
+	ctx context.Context,
+	endpoint string,
+	payload map[string]any,
+) (map[string]any, error) {
+	req, err := jsonRequest(ctx, http.MethodPost, strings.TrimRight(c.urls.Agent, "/")+endpoint, payload)
+	if err != nil {
+		return nil, err
+	}
+	var result map[string]any
+	err = c.doJSON(req, &result)
+	return result, err
+}
+
+func (c *downstreamClient) createSnapshot(
+	ctx context.Context,
+	investigationID, label string,
+) (map[string]any, error) {
+	payload := map[string]any{"investigation_id": investigationID, "label": label}
+	req, err := jsonRequest(ctx, http.MethodPost, strings.TrimRight(c.urls.GraphStore, "/")+"/v1/snapshots", payload)
+	if err != nil {
+		return nil, err
+	}
+	var snapshot map[string]any
+	err = c.doJSON(req, &snapshot)
+	return snapshot, err
+}
+
+func (c *downstreamClient) listSnapshots(
+	ctx context.Context,
+	investigationID string,
+) ([]map[string]any, error) {
+	query := url.Values{"investigation_id": []string{investigationID}}
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		strings.TrimRight(c.urls.GraphStore, "/")+"/v1/snapshots?"+query.Encode(),
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Snapshots []map[string]any `json:"snapshots"`
+	}
+	if err := c.doJSON(req, &response); err != nil {
+		return nil, err
+	}
+	return response.Snapshots, nil
+}
+
+func (c *downstreamClient) temporalTimeline(
+	ctx context.Context,
+	investigationID string,
+) ([]map[string]any, error) {
+	query := url.Values{"investigation_id": []string{investigationID}}
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		strings.TrimRight(c.urls.Temporal, "/")+"/v1/timeline?"+query.Encode(),
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Events []map[string]any `json:"events"`
+	}
+	if err := c.doJSON(req, &response); err != nil {
+		return nil, err
+	}
+	return response.Events, nil
+}
+
+func (c *downstreamClient) upsertVectors(
+	ctx context.Context,
+	investigationID, collection string,
+	points []map[string]any,
+) error {
+	payload := map[string]any{
+		"collection":       collection,
+		"points":           points,
+		"investigation_id": investigationID,
+	}
+	req, err := jsonRequest(ctx, http.MethodPost, strings.TrimRight(c.urls.Vector, "/")+"/v1/points/upsert", payload)
+	if err != nil {
+		return err
+	}
+	return c.doJSON(req, nil)
+}
+
+func (c *downstreamClient) ensureCollection(
+	ctx context.Context,
+	investigationID, name string,
+	vectorSize uint64,
+) error {
+	payload := map[string]any{
+		"name":             name,
+		"vector_size":      vectorSize,
+		"distance":         "COSINE",
+		"investigation_id": investigationID,
+	}
+	req, err := jsonRequest(ctx, http.MethodPost, strings.TrimRight(c.urls.Vector, "/")+"/v1/collections", payload)
+	if err != nil {
+		return err
+	}
+	// Collection may already exist; treat non-2xx as non-fatal at call site.
+	return c.doJSON(req, nil)
 }
 
 func (c *downstreamClient) health(ctx context.Context, baseURL string) error {

@@ -43,23 +43,26 @@ func main() {
 	port := flag.Int("port", lookupEnvInt("PORT", 8007), "HTTP listen port")
 	flag.Parse()
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", healthzHandler)
-	mux.HandleFunc("/versionz", versionzHandler)
-	mux.HandleFunc("/", rootHandler)
+	storageURL := os.Getenv("DDU_STORAGE_URL")
+	if storageURL == "" {
+		storageURL = "http://localhost:8003"
+	}
+	client := &http.Client{Timeout: 90 * time.Second}
+	var emitter lineageEmitter
+	lineage, err := lineageemitter.New(versionInfo())
+	if err != nil {
+		log.Printf("lineage emitter not initialized: %v (events will be dropped)", err)
+	} else {
+		emitter = lineage
+	}
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", *port),
-		Handler:           mux,
+		Handler:           newHandler(newStorageClient(storageURL, client), emitter, client),
 		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       60 * time.Second,
-		WriteTimeout:      60 * time.Second,
+		ReadTimeout:       5 * time.Minute,
+		WriteTimeout:      5 * time.Minute,
 		IdleTimeout:       120 * time.Second,
-	}
-
-	// Best-effort lineage client; not required for /healthz.
-	if _, err := lineageemitter.New(versionInfo()); err != nil {
-		log.Printf("lineage emitter not initialized: %v (events will be dropped)", err)
 	}
 
 	go func() {
@@ -91,7 +94,16 @@ func healthzHandler(w http.ResponseWriter, _ *http.Request) {
 
 func versionzHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(versionInfo())
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"service":         serviceName,
+		"service_version": serviceVersion,
+		"tool":            "browsertrix",
+		"tool_version":    "1.12.0",
+		"model":           model,
+		"model_version":   modelVersion,
+		"git_commit":      gitCommit,
+		"built_at":        builtAt,
+	})
 }
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
@@ -103,10 +115,11 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"service": serviceName,
 		"version": serviceVersion,
-		"status":  "scaffold",
+		"status":  "ready",
 		"endpoints": []string{
 			"GET /healthz",
 			"GET /versionz",
+			"POST /v1/capture",
 		},
 	})
 }

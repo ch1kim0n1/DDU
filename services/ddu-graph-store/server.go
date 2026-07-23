@@ -20,6 +20,7 @@ type graphRepository interface {
 	ListEntities(context.Context, string, string) ([]Entity, error)
 	CreateRelationship(context.Context, Relationship) (Relationship, error)
 	ListRelationships(context.Context, string) ([]Relationship, error)
+	UpdateRelationshipVerification(context.Context, string, string, string) (Relationship, error)
 	Query(context.Context, string, map[string]any) ([]map[string]any, error)
 	Close(context.Context) error
 }
@@ -28,14 +29,31 @@ type lineageEmitter interface {
 	Emit(context.Context, lineageemitter.Event) error
 }
 
+type graphSnapshot struct {
+	ID              string         `json:"id"`
+	InvestigationID string         `json:"investigation_id"`
+	Label           string         `json:"label"`
+	CreatedAt       string         `json:"created_at"`
+	EntityCount     int            `json:"entity_count"`
+	RelationshipCount int          `json:"relationship_count"`
+	Entities        []Entity       `json:"entities"`
+	Relationships   []Relationship `json:"relationships"`
+}
+
 type server struct {
 	repository graphRepository
 	lineage    lineageEmitter
 	now        func() time.Time
+	snapshots  map[string]graphSnapshot
 }
 
 func newHandler(repository graphRepository, lineage lineageEmitter) http.Handler {
-	s := &server{repository: repository, lineage: lineage, now: time.Now}
+	s := &server{
+		repository: repository,
+		lineage:    lineage,
+		now:        time.Now,
+		snapshots:  map[string]graphSnapshot{},
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.HandleFunc("GET /versionz", versionzHandler)
@@ -44,6 +62,9 @@ func newHandler(repository graphRepository, lineage lineageEmitter) http.Handler
 	mux.HandleFunc("GET /v1/entities", s.listEntities)
 	mux.HandleFunc("POST /v1/relationships", s.createRelationship)
 	mux.HandleFunc("GET /v1/relationships", s.listRelationships)
+	mux.HandleFunc("PATCH /v1/relationships/{id}/verification", s.verifyRelationship)
+	mux.HandleFunc("POST /v1/snapshots", s.createSnapshot)
+	mux.HandleFunc("GET /v1/snapshots", s.listSnapshots)
 	mux.HandleFunc("POST /v1/query", s.query)
 	mux.HandleFunc("GET /", rootHandler)
 	return mux
@@ -183,6 +204,89 @@ func (s *server) listRelationships(w http.ResponseWriter, r *http.Request) {
 	}
 	s.complete(r.Context(), runID, "list-relationships", investigationID, "", "")
 	writeJSON(w, http.StatusOK, RelationshipList{Relationships: relationships})
+}
+
+func (s *server) verifyRelationship(w http.ResponseWriter, r *http.Request) {
+	relationshipID := strings.TrimSpace(r.PathValue("id"))
+	var input struct {
+		VerificationState string `json:"verification_state"`
+		VerifiedBy        string `json:"verified_by"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input); err != nil ||
+		relationshipID == "" || strings.TrimSpace(input.VerificationState) == "" {
+		writeError(w, http.StatusBadRequest, "relationship id and verification_state are required")
+		return
+	}
+	runID := s.start(r.Context(), "verify-relationship", "")
+	updated, err := s.repository.UpdateRelationshipVerification(
+		r.Context(), relationshipID, input.VerificationState, input.VerifiedBy,
+	)
+	if err != nil {
+		s.fail(r.Context(), runID, "verify-relationship", "")
+		writeError(w, http.StatusBadGateway, "verification update failed")
+		return
+	}
+	s.complete(r.Context(), runID, "verify-relationship", updated.InvestigationID, updated.ID, "DDU.RELATIONSHIP")
+	writeJSON(w, http.StatusOK, updated)
+}
+
+func (s *server) createSnapshot(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		InvestigationID string `json:"investigation_id"`
+		Label           string `json:"label"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input); err != nil ||
+		strings.TrimSpace(input.InvestigationID) == "" {
+		writeError(w, http.StatusBadRequest, "investigation_id is required")
+		return
+	}
+	runID := s.start(r.Context(), "create-snapshot", input.InvestigationID)
+	entities, err := s.repository.ListEntities(r.Context(), input.InvestigationID, "")
+	if err != nil {
+		s.fail(r.Context(), runID, "create-snapshot", input.InvestigationID)
+		writeError(w, http.StatusBadGateway, "snapshot entity listing failed")
+		return
+	}
+	relationships, err := s.repository.ListRelationships(r.Context(), input.InvestigationID)
+	if err != nil {
+		s.fail(r.Context(), runID, "create-snapshot", input.InvestigationID)
+		writeError(w, http.StatusBadGateway, "snapshot relationship listing failed")
+		return
+	}
+	if entities == nil {
+		entities = []Entity{}
+	}
+	if relationships == nil {
+		relationships = []Relationship{}
+	}
+	snapshot := graphSnapshot{
+		ID:                uuid.NewString(),
+		InvestigationID:   input.InvestigationID,
+		Label:             input.Label,
+		CreatedAt:         s.now().UTC().Format(time.RFC3339Nano),
+		EntityCount:       len(entities),
+		RelationshipCount: len(relationships),
+		Entities:          entities,
+		Relationships:     relationships,
+	}
+	s.snapshots[snapshot.ID] = snapshot
+	s.complete(r.Context(), runID, "create-snapshot", input.InvestigationID, snapshot.ID, "DDU.SNAPSHOT")
+	writeJSON(w, http.StatusCreated, snapshot)
+}
+
+func (s *server) listSnapshots(w http.ResponseWriter, r *http.Request) {
+	investigationID := strings.TrimSpace(r.URL.Query().Get("investigation_id"))
+	if investigationID == "" {
+		writeError(w, http.StatusBadRequest, "investigation_id is required")
+		return
+	}
+	snapshots := make([]graphSnapshot, 0)
+	for _, snapshot := range s.snapshots {
+		if snapshot.InvestigationID == investigationID {
+			snapshots = append(snapshots, snapshot)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"snapshots": snapshots})
 }
 
 func (s *server) query(w http.ResponseWriter, r *http.Request) {

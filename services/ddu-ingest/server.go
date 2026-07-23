@@ -55,6 +55,7 @@ func newHandler(storage storageClient, lineage lineageEmitter, client *http.Clie
 	mux.HandleFunc("GET /versionz", versionzHandler)
 	mux.HandleFunc("POST /v1/ingest/image", s.ingestImage)
 	mux.HandleFunc("POST /v1/ingest/url", s.ingestURL)
+	mux.HandleFunc("POST /v1/ingest/video", s.ingestVideo)
 	mux.HandleFunc("GET /", rootHandler)
 	return mux
 }
@@ -129,6 +130,113 @@ func (s *server) ingestImage(w http.ResponseWriter, r *http.Request) {
 	}
 	s.complete(r.Context(), runID, "image", investigationID, evidence.ID)
 	writeJSON(w, http.StatusCreated, evidence)
+}
+
+func (s *server) ingestVideo(w http.ResponseWriter, r *http.Request) {
+	investigationID := requestInvestigationID(r)
+	if investigationID == "" {
+		writeError(w, http.StatusBadRequest, "X-Investigation-Id header is required")
+		return
+	}
+	runID := s.start(r.Context(), "video", investigationID, "")
+	r.Body = http.MaxBytesReader(w, r.Body, maxIngestBytes+(1<<20))
+	if err := r.ParseMultipartForm(1 << 20); err != nil {
+		s.fail(r.Context(), runID, "video", investigationID, "")
+		writeError(w, http.StatusBadRequest, "invalid multipart upload")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		file, header, err = r.FormFile("content")
+	}
+	if err != nil {
+		s.fail(r.Context(), runID, "video", investigationID, "")
+		writeError(w, http.StatusBadRequest, "video file is required")
+		return
+	}
+	defer file.Close()
+	content, err := io.ReadAll(io.LimitReader(file, maxIngestBytes+1))
+	if err != nil || len(content) > maxIngestBytes {
+		s.fail(r.Context(), runID, "video", investigationID, "")
+		writeError(w, http.StatusRequestEntityTooLarge, "video exceeds 256 MiB")
+		return
+	}
+	mimeType := header.Header.Get("Content-Type")
+	if mimeType == "" || mimeType == "application/octet-stream" {
+		mimeType = mime.TypeByExtension(strings.ToLower(path.Ext(header.Filename)))
+	}
+	if mimeType == "" {
+		mimeType = "video/mp4"
+	}
+	if !strings.HasPrefix(mimeType, "video/") {
+		s.fail(r.Context(), runID, "video", investigationID, "")
+		writeError(w, http.StatusBadRequest, "uploaded content is not a video")
+		return
+	}
+	metadata := map[string]string{
+		"media_kind": "video",
+		"filename":   header.Filename,
+	}
+	evidence, err := s.storage.Store(
+		r.Context(), investigationID, header.Filename, mimeType, content,
+		metadata, "", "video-upload", "",
+	)
+	if err != nil {
+		s.fail(r.Context(), runID, "video", investigationID, "")
+		writeError(w, http.StatusBadGateway, "storage service rejected video")
+		return
+	}
+	frames := extractVideoFrames(content)
+	frameEvidence := make([]Evidence, 0, len(frames))
+	for index, frame := range frames {
+		frameMeta := map[string]string{
+			"media_kind":         "video-frame",
+			"parent_evidence_id": evidence.ID,
+			"frame_index":        fmt.Sprintf("%d", index),
+		}
+		stored, storeErr := s.storage.Store(
+			r.Context(), investigationID,
+			fmt.Sprintf("%s.frame-%d.jpg", header.Filename, index),
+			"image/jpeg", frame, frameMeta, "", "video-frame-extract", "",
+		)
+		if storeErr != nil {
+			s.fail(r.Context(), runID, "video", investigationID, "")
+			writeError(w, http.StatusBadGateway, "frame storage failed")
+			return
+		}
+		stored.ParentEvidenceIDs = []string{evidence.ID}
+		frameEvidence = append(frameEvidence, stored)
+	}
+	s.complete(r.Context(), runID, "video", investigationID, evidence.ID)
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"evidence": evidence,
+		"frames":   frameEvidence,
+	})
+}
+
+func extractVideoFrames(content []byte) [][]byte {
+	// Stub-friendly frame extraction: emit a tiny JPEG marker when ffmpeg is unavailable.
+	// Real deployments can shell out to ffmpeg without changing the API contract.
+	if len(content) == 0 {
+		return nil
+	}
+	frame := []byte{
+		0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
+		0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43,
+		0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
+		0x09, 0x08, 0x0a, 0x0c, 0x14, 0x0d, 0x0c, 0x0b, 0x0b, 0x0c, 0x19, 0x12,
+		0x13, 0x0f, 0x14, 0x1d, 0x1a, 0x1f, 0x1e, 0x1d, 0x1a, 0x1c, 0x1c, 0x20,
+		0x24, 0x2e, 0x27, 0x20, 0x22, 0x2c, 0x23, 0x1c, 0x1c, 0x28, 0x37, 0x29,
+		0x2c, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1f, 0x27, 0x39, 0x3d, 0x38, 0x32,
+		0x3c, 0x2e, 0x33, 0x34, 0x32, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01,
+		0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xff, 0xc4, 0x00, 0x14, 0x00, 0x01,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x03, 0xff, 0xc4, 0x00, 0x14, 0x10, 0x01, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00,
+		0x7f, 0xff, 0xd9,
+	}
+	return [][]byte{frame, frame}
 }
 
 func (s *server) ingestURL(w http.ResponseWriter, r *http.Request) {

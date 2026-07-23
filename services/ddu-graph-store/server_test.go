@@ -44,6 +44,25 @@ func (f *fakeGraphRepository) CreateRelationship(_ context.Context, relationship
 	return relationship, nil
 }
 
+func (f *fakeGraphRepository) UpdateRelationshipVerification(
+	_ context.Context, relationshipID, state, verifiedBy string,
+) (Relationship, error) {
+	for i, relationship := range f.relationships {
+		if relationship.ID == relationshipID {
+			relationship.VerificationState = state
+			if relationship.Provenance.Parameters == nil {
+				relationship.Provenance.Parameters = map[string]string{}
+			}
+			if verifiedBy != "" {
+				relationship.Provenance.Parameters["verified_by"] = verifiedBy
+			}
+			f.relationships[i] = relationship
+			return relationship, nil
+		}
+	}
+	return Relationship{}, errNotFound
+}
+
 func (f *fakeGraphRepository) ListRelationships(_ context.Context, investigationID string) ([]Relationship, error) {
 	var result []Relationship
 	for _, relationship := range f.relationships {

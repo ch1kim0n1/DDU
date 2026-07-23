@@ -291,6 +291,39 @@ async def detect(request: DetectRequest) -> list[dict]:
     return observations
 
 
+class SpecializedDetectRequest(BaseModel):
+    evidence_id: str = Field(min_length=1)
+    investigation_id: str = Field(min_length=1)
+    model: str = "mmdetection"
+    classes: list[str] = Field(default_factory=list)
+
+
+@app.post("/v1/detect/specialized")
+async def detect_specialized(request: SpecializedDetectRequest) -> list[dict]:
+    """Phase 2 specialized detection (MMDetection). Stub-safe when MODEL_MODE=stub."""
+    prompts = request.classes or ["person", "vehicle", "weapon"]
+    base = DetectRequest(
+        evidence_id=request.evidence_id,
+        investigation_id=request.investigation_id,
+        prompts=prompts,
+    )
+    observations = await detect(base)
+    for item in observations:
+        item["attributes"] = {
+            **(item.get("attributes") or {}),
+            "detector_family": "mmdetection",
+            "specialized_model": request.model,
+        }
+        provenance = item.get("provenance") or {}
+        provenance["extraction_method"] = (
+            "development-stub"
+            if os.environ.get("MODEL_MODE", "").lower() == "stub"
+            else "mmdetection"
+        )
+        item["provenance"] = provenance
+    return observations
+
+
 def main() -> None:
     port = int(os.environ.get("PORT", 8101))
     log.info("ddu-vision listening on :%d", port)

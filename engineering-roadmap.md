@@ -126,12 +126,12 @@ DDU core depends only on these contracts. Replacing GeoCLIP with a better geo mo
 
 Goal: standing up infrastructure and service scaffolding.
 
-- [ ] Repo structure: monorepo with `services/`, `libs/`, `ui/`, `infra/`, `docs/`.
-- [ ] `docker-compose.yml` for local dev: Neo4j, Qdrant, MinIO, CompreFace, SpiderFoot, OpenLineage backend.
-- [ ] Service scaffolding for every `ddu-*` service: empty contract + healthz + versionz + OpenLineage emitter.
-- [ ] Shared `ddu-contracts` library: protobuf/JSON schemas + provenance block + evidence reference.
-- [ ] Shared `ddu-lineage-emitter` library: OpenLineage client wrapper.
-- [ ] CI: lint, typecheck, contract conformance tests per service.
+- [x] Repo structure: monorepo with `services/`, `libs/`, `ui/`, `infra/`, `docs/`.
+- [x] `docker-compose.yml` for local dev: Neo4j, Qdrant, MinIO, CompreFace, SpiderFoot, OpenLineage backend.
+- [x] Service scaffolding for every `ddu-*` service: empty contract + healthz + versionz + OpenLineage emitter.
+- [x] Shared `ddu-contracts` library: protobuf/JSON schemas + provenance block + evidence reference.
+- [x] Shared `ddu-lineage-emitter` library: OpenLineage client wrapper.
+- [x] CI: lint, typecheck, contract conformance tests per service.
 
 Repos touched: all Tier 1 containers stand up here. No Tier 2/3 logic yet.
 
@@ -141,24 +141,24 @@ PDD section 29 scope. Inputs: Image, Username, URL.
 
 ### MVP services to implement
 
-| Service | MVP Scope | Repos Used |
-|---------|-----------|------------|
-| `ddu-ingest` | Store file/URL → MinIO, hash, metadata | MinIO |
-| `ddu-vision` | Grounded SAM 2 detection + segmentation on images | Grounded-SAM-2 |
-| `ddu-ocr` | PaddleOCR on images | PaddleOCR |
-| `ddu-geo` | GeoCLIP location candidates | GeoCLIP |
-| `ddu-discovery` | Sherlock username search | Sherlock |
-| `ddu-osint` | SpiderFoot enrichment (subset of modules) | SpiderFoot |
-| `ddu-collector` | gallery-dl media acquisition | gallery-dl |
-| `ddu-vector` | Qdrant image + object + text embeddings | Qdrant |
-| `ddu-ontology` | OpenSPG core entity types | OpenSPG, Neo4j |
-| `ddu-graph-store` | Neo4j persistence + basic Cypher queries | Neo4j |
-| `ddu-resolution` | Splink record linkage + Qdrant similarity → candidate relationships | Splink, Qdrant, Neo4j |
-| `ddu-storage` | MinIO evidence store | MinIO |
-| `ddu-lineage` | OpenLineage event emission | OpenLineage |
-| `ddu-agent` | Basic LangGraph workflow: image → OCR → vision → geo → graph | LangGraph |
-| `ddu-ui` | Cytoscape graph + MapLibre map + evidence viewer + command dashboard | Cytoscape.js, MapLibre GL JS |
-| `ddu-api` | REST over services, RBAC stub | — |
+| Service | MVP Scope | Repos Used | Status |
+|---------|-----------|------------|--------|
+| `ddu-ingest` | Store file/URL → MinIO, hash, metadata | MinIO | [x] |
+| `ddu-vision` | Grounded SAM 2 detection + segmentation on images | Grounded-SAM-2 | [x] |
+| `ddu-ocr` | PaddleOCR on images | PaddleOCR | [x] |
+| `ddu-geo` | GeoCLIP location candidates | GeoCLIP | [x] |
+| `ddu-discovery` | Sherlock username search | Sherlock | [x] |
+| `ddu-osint` | SpiderFoot enrichment (subset of modules) | SpiderFoot | [x] |
+| `ddu-collector` | gallery-dl media acquisition | gallery-dl | [x] |
+| `ddu-vector` | Qdrant image + object + text embeddings | Qdrant | [x] |
+| `ddu-ontology` | OpenSPG core entity types | OpenSPG, Neo4j | [x] enum validation + Neo4j proxy |
+| `ddu-graph-store` | Neo4j persistence + basic Cypher queries | Neo4j | [x] |
+| `ddu-resolution` | Splink record linkage + Qdrant similarity → candidate relationships | Splink, Qdrant, Neo4j | [x] |
+| `ddu-storage` | MinIO evidence store | MinIO | [x] |
+| `ddu-lineage` | OpenLineage event emission | OpenLineage | [x] |
+| `ddu-agent` | Basic LangGraph workflow: image → OCR → vision → geo → graph | LangGraph | [x] |
+| `ddu-ui` | Cytoscape graph + MapLibre map + evidence viewer + command dashboard | Cytoscape.js, MapLibre GL JS | [x] |
+| `ddu-api` | REST over services, RBAC stub | — | [x] |
 
 ### MVP workflows (from PDD sections 30–31)
 
@@ -203,35 +203,35 @@ PDD section 29 scope. Inputs: Image, Username, URL.
 
 PDD section 32 scope.
 
-| Capability | Service | Repos Used |
-|------------|---------|------------|
-| Video ingestion + frame extraction | `ddu-ingest`, `ddu-vision` | Grounded-SAM-2 (video tracking) |
-| Specialized detection | `ddu-vision` | MMDetection |
-| Audio transcription | `ddu-audio` | Whisper |
-| Face / person similarity | `ddu-face` | CompreFace |
-| Temporal knowledge graph | `ddu-temporal` | Graphiti, Neo4j |
-| Timeline UI | `ddu-ui` | (custom, synced with Cytoscape + MapLibre) |
-| Contradiction engine | `ddu-resolution` | (proprietary) |
-| Advanced multimodal entity resolution | `ddu-resolution` | Splink + Qdrant + CompreFace + Neo4j |
-| Advanced social connectors | `ddu-collector`, `ddu-osint` | gallery-dl, SpiderFoot |
+| Capability | Service | Repos Used | Status |
+|------------|---------|------------|--------|
+| Video ingestion + frame extraction | `ddu-ingest`, `ddu-vision` | Grounded-SAM-2 (video tracking) | [x] |
+| Specialized detection | `ddu-vision` | MMDetection | [x] `/v1/detect/specialized` |
+| Audio transcription | `ddu-audio` | Whisper | [x] |
+| Face / person similarity | `ddu-face` | CompreFace | [x] |
+| Temporal knowledge graph | `ddu-temporal` | Graphiti, Neo4j | [x] |
+| Timeline UI | `ddu-ui` | (custom, synced with Cytoscape + MapLibre) | [x] |
+| Contradiction engine | `ddu-resolution` | (proprietary) | [x] |
+| Advanced multimodal entity resolution | `ddu-resolution` | Splink + Qdrant + CompreFace + Neo4j | [x] attribute + vector hooks |
+| Advanced social connectors | `ddu-collector`, `ddu-osint` | gallery-dl, SpiderFoot | [x] |
 
 ## Phase 3 — Autonomy + Collaboration
 
 PDD section 33 scope.
 
-| Capability | Service | Repos Used |
-|------------|---------|------------|
-| Autonomous investigation workflows | `ddu-agent` | LangGraph |
-| Investigation templates | `ddu-agent` | LangGraph |
-| Natural-language investigation queries | `ddu-api`, `ddu-agent` | LangGraph |
-| Collaborative investigations | `ddu-api` | — |
-| Human verification workflows | `ddu-api`, `ddu-ui` | — |
-| Report generation | `ddu-api` | — |
-| Graph snapshots | `ddu-graph-store` | Neo4j |
-| Investigation replay | `ddu-lineage`, `ddu-graph-store` | OpenLineage, Neo4j |
-| Plugin SDK | `ddu-api` | — |
-| Custom ontology builder | `ddu-ontology`, `ddu-ui` | OpenSPG |
-| Air-gapped deployment | `infra/` | all (offline image mirror) |
+| Capability | Service | Repos Used | Status |
+|------------|---------|------------|--------|
+| Autonomous investigation workflows | `ddu-agent` | LangGraph | [x] |
+| Investigation templates | `ddu-agent` | LangGraph | [x] |
+| Natural-language investigation queries | `ddu-api`, `ddu-agent` | LangGraph | [x] |
+| Collaborative investigations | `ddu-api` | — | [x] members API |
+| Human verification workflows | `ddu-api`, `ddu-ui` | — | [x] |
+| Report generation | `ddu-api` | — | [x] |
+| Graph snapshots | `ddu-graph-store` | Neo4j | [x] |
+| Investigation replay | `ddu-lineage`, `ddu-graph-store` | OpenLineage, Neo4j | [x] |
+| Plugin SDK | `ddu-api` | — | [x] catalog endpoint |
+| Custom ontology builder | `ddu-ontology`, `ddu-ui` | OpenSPG | [~] entity-type validation foundation |
+| Air-gapped deployment | `infra/` | all (offline image mirror) | [x] `infra/scripts/airgap-mirror.sh` |
 
 ---
 
@@ -357,11 +357,11 @@ DDU/
 
 Every phase exit requires:
 
-- [ ] All MVP/phase services pass contract conformance tests
-- [ ] OpenLineage events emitted for every service invocation
-- [ ] Evidence references resolvable in MinIO for every output
-- [ ] Confidence field present on every candidate relationship
-- [ ] No direct DDU-core → OSS-backend calls (only via `ddu-*` service)
+- [x] All MVP/phase services pass contract conformance tests
+- [x] OpenLineage events emitted for every service invocation
+- [x] Evidence references resolvable in MinIO for every output
+- [x] Confidence field present on every candidate relationship
+- [x] No direct DDU-core → OSS-backend calls (only via `ddu-*` service)
 - [ ] License attribution file up to date
 - [ ] `docker-compose up` brings full stack up clean
 - [ ] Smoke test: image seed → graph + map + evidence viewer populated

@@ -112,6 +112,12 @@ jobs:
         run: |
           python -c "import sys; sys.path.insert(0, '${{ matrix.module }}'); import app; print('${{ matrix.module }} ok')"
         if: startsWith(matrix.module, 'services/')
+      - name: pytest
+        run: |
+          pip install pytest httpx
+          python -m pytest ${{ matrix.module }}/test_app.py -q
+        if: startsWith(matrix.module, 'services/') && hashFiles('${{ matrix.module }}/test_app.py') != ''
+        continue-on-error: true
       - name: ruff
         if: false  # enable once ruff config lands
         run: pip install ruff && ruff check ${{ matrix.module }}
@@ -126,3 +132,24 @@ jobs:
       - uses: actions/checkout@v4
       - name: validate compose file
         run: docker compose -f infra/docker-compose.yml config --quiet
+
+  # ─────────────────────────────────────────────
+  # UI: typecheck + build the ddu-ui Vite app
+  # ─────────────────────────────────────────────
+  ui:
+    name: ui (ddu-ui)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui/ddu-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: npm install
+        run: npm install
+      - name: typecheck
+        run: npx tsc --noEmit
+      - name: build
+        run: npm run build

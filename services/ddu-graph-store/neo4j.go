@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
@@ -180,6 +181,57 @@ func (r *neo4jRepository) CreateRelationship(ctx context.Context, relationship R
 			return Relationship{}, err
 		}
 		return Relationship{}, errNotFound
+	}
+	return relationship, nil
+}
+
+func (r *neo4jRepository) UpdateRelationshipVerification(
+	ctx context.Context,
+	relationshipID, state, verifiedBy string,
+) (Relationship, error) {
+	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+	result, err := session.Run(ctx,
+		"MATCH ()-[rel]->() WHERE rel.id = $id RETURN rel.record_json AS record",
+		map[string]any{"id": relationshipID},
+	)
+	if err != nil {
+		return Relationship{}, err
+	}
+	if !result.Next(ctx) {
+		if err := result.Err(); err != nil {
+			return Relationship{}, err
+		}
+		return Relationship{}, errNotFound
+	}
+	raw, _ := result.Record().Get("record")
+	rawString, _ := raw.(string)
+	var relationship Relationship
+	if err := json.Unmarshal([]byte(rawString), &relationship); err != nil {
+		return Relationship{}, err
+	}
+	relationship.VerificationState = state
+	relationship.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	if relationship.Provenance.Parameters == nil {
+		relationship.Provenance.Parameters = map[string]string{}
+	}
+	if verifiedBy != "" {
+		relationship.Provenance.Parameters["verified_by"] = verifiedBy
+	}
+	record, err := json.Marshal(relationship)
+	if err != nil {
+		return Relationship{}, err
+	}
+	_, err = session.Run(ctx,
+		"MATCH ()-[rel]->() WHERE rel.id = $id SET rel.verification_state = $state, "+
+			"rel.updated_at = $updated_at, rel.record_json = $record RETURN rel.id",
+		map[string]any{
+			"id": relationshipID, "state": state,
+			"updated_at": relationship.UpdatedAt, "record": string(record),
+		},
+	)
+	if err != nil {
+		return Relationship{}, err
 	}
 	return relationship, nil
 }

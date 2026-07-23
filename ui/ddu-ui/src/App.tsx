@@ -8,10 +8,17 @@ import {
 
 import {
   api,
+  getRole,
+  setRole,
   type Entity,
   type Evidence,
   type Investigation,
+  type Relationship,
+  type TimelineEvent,
 } from "./api";
+import {GraphView} from "./GraphView";
+import {MapView} from "./MapView";
+import {TimelineView} from "./TimelineView";
 
 function navigate(path: string) {
   window.history.pushState({}, "", path);
@@ -51,10 +58,22 @@ function Shell({children}: {children: ReactNode}) {
           </span>
           <span>
             <strong>Digital Detective Unit</strong>
-            <small>Evidence desk / Workflow A</small>
+            <small>Evidence desk / Phases 1–3</small>
           </span>
         </Link>
         <div className="system-state">
+          <label>
+            Role
+            <select
+              defaultValue={getRole()}
+              onChange={(event) => setRole(event.target.value)}
+            >
+              <option value="viewer">viewer</option>
+              <option value="investigator">investigator</option>
+              <option value="analyst">analyst</option>
+              <option value="admin">admin</option>
+            </select>
+          </label>
           <i />
           Local operations
         </div>
@@ -162,25 +181,41 @@ function InvestigationPage({id}: {id: string}) {
   const [entities, setEntities] = useState<Entity[]>([]);
   const [observations, setObservations] = useState<Entity[]>([]);
   const [evidence, setEvidence] = useState<Evidence[]>([]);
+  const [relationships, setRelationships] = useState<Relationship[]>([]);
+  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [lineageCount, setLineageCount] = useState(0);
   const [error, setError] = useState("");
-  const [uploading, setUploading] = useState(false);
+  const [busy, setBusy] = useState("");
+  const [username, setUsername] = useState("");
+  const [sourceURL, setSourceURL] = useState("");
+  const [tab, setTab] = useState<"graph" | "map" | "timeline" | "list">("graph");
 
   const load = useCallback(async () => {
     try {
-      const [caseData, entityData, observationData, lineageData, evidenceData] =
-        await Promise.all([
-          api.getInvestigation(id),
-          api.listEntities(id),
-          api.listObservations(id),
-          api.listLineage(id),
-          api.listEvidence(id),
-        ]);
+      const [
+        caseData,
+        entityData,
+        observationData,
+        lineageData,
+        evidenceData,
+        relationshipData,
+        timelineData,
+      ] = await Promise.all([
+        api.getInvestigation(id),
+        api.listEntities(id),
+        api.listObservations(id),
+        api.listLineage(id),
+        api.listEvidence(id),
+        api.listRelationships(id),
+        api.timeline(id),
+      ]);
       setInvestigation(caseData);
       setEntities(entityData);
       setObservations(observationData);
       setLineageCount(lineageData.count);
       setEvidence(evidenceData);
+      setRelationships(relationshipData);
+      setTimeline(timelineData);
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load case");
@@ -191,17 +226,16 @@ function InvestigationPage({id}: {id: string}) {
     void load();
   }, [load]);
 
-  async function upload(file?: File) {
-    if (!file) return;
-    setUploading(true);
+  async function runAction(label: string, action: () => Promise<unknown>) {
+    setBusy(label);
     setError("");
     try {
-      await api.uploadImage(id, file);
+      await action();
       await load();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Processing failed");
+      setError(reason instanceof Error ? reason.message : `${label} failed`);
     } finally {
-      setUploading(false);
+      setBusy("");
     }
   }
 
@@ -214,71 +248,259 @@ function InvestigationPage({id}: {id: string}) {
           <h1>{investigation?.name || "Loading case…"}</h1>
           <code>{id}</code>
         </div>
-        <label className={`upload-control ${uploading ? "busy" : ""}`}>
+        <label className={`upload-control ${busy === "image" ? "busy" : ""}`}>
           <input
             accept="image/*"
-            disabled={uploading}
-            onChange={(event) => void upload(event.target.files?.[0])}
+            disabled={Boolean(busy)}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              void runAction("image", () => api.uploadImage(id, file));
+            }}
             type="file"
           />
-          <span>{uploading ? "Processing image…" : "＋ Upload image"}</span>
+          <span>{busy === "image" ? "Processing image…" : "＋ Upload image"}</span>
         </label>
       </div>
+
+      <section className="intake-grid">
+        <form
+          className="intake-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!username.trim()) return;
+            void runAction("username", () => api.processUsername(id, username.trim()));
+          }}
+        >
+          <label>
+            Username workflow
+            <input
+              disabled={Boolean(busy)}
+              onChange={(event) => setUsername(event.target.value)}
+              placeholder="handle"
+              value={username}
+            />
+          </label>
+          <button disabled={Boolean(busy) || !username.trim()} type="submit">
+            {busy === "username" ? "Discovering…" : "Run discovery"}
+          </button>
+        </form>
+        <form
+          className="intake-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!sourceURL.trim()) return;
+            void runAction("url", () => api.processURL(id, sourceURL.trim()));
+          }}
+        >
+          <label>
+            URL workflow
+            <input
+              disabled={Boolean(busy)}
+              onChange={(event) => setSourceURL(event.target.value)}
+              placeholder="https://"
+              value={sourceURL}
+            />
+          </label>
+          <button disabled={Boolean(busy) || !sourceURL.trim()} type="submit">
+            {busy === "url" ? "Acquiring…" : "Collect / capture"}
+          </button>
+        </form>
+        <div className="intake-actions">
+          <button
+            disabled={Boolean(busy)}
+            onClick={() => void runAction("resolve", () => api.resolve(id))}
+            type="button"
+          >
+            Resolve candidates
+          </button>
+          <button
+            disabled={Boolean(busy)}
+            onClick={() => void runAction("snapshot", () => api.createSnapshot(id, "manual"))}
+            type="button"
+          >
+            Snapshot graph
+          </button>
+          <button
+            disabled={Boolean(busy)}
+            onClick={() => void runAction("report", () => api.generateReport(id))}
+            type="button"
+          >
+            Generate report
+          </button>
+          <button
+            disabled={Boolean(busy)}
+            onClick={() =>
+              void runAction("agent", () =>
+                api.runAgent(id, "query", {query: "resolve locations and accounts"}),
+              )
+            }
+            type="button"
+          >
+            NL agent plan
+          </button>
+        </div>
+      </section>
 
       {error && <div className="error-banner">{error}</div>}
 
       <section className="metric-strip" aria-label="Investigation totals">
         <Metric label="Evidence" value={evidence.length} />
         <Metric label="Observations" value={observations.length} />
-        <Metric label="All entities" value={entities.length} />
+        <Metric label="Relationships" value={relationships.length} />
         <Metric label="Lineage runs" value={lineageCount} accent />
       </section>
 
-      <div className="dashboard-grid">
-        <section className="panel evidence-panel">
-          <div className="section-heading">
-            <h2>Evidence register</h2>
-            <span>Immutable source objects</span>
-          </div>
-          {evidence.length === 0 ? (
-            <p className="panel-empty">Upload an image to begin analysis.</p>
-          ) : (
-            <div className="evidence-list">
-              {evidence.map((item) => (
-                <Link
-                  key={item.id}
-                  to={`/investigations/${id}/evidence/${encodeURIComponent(item.id)}`}
-                  className="evidence-row"
-                >
-                  <div className="thumb-placeholder">IMG</div>
-                  <div>
-                    <strong>{item.mime_type}</strong>
-                    <code>{shortHash(item.id)}</code>
-                    <small>{formatBytes(item.size_bytes)} · {item.acquisition_method}</small>
-                  </div>
-                  <span>View →</span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="panel observations-panel">
-          <div className="section-heading">
-            <h2>Extracted observations</h2>
-            <span>Unverified machine output</span>
-          </div>
-          {observations.length === 0 ? (
-            <p className="panel-empty">No observations recorded.</p>
-          ) : (
-            <div className="observation-list">
-              {observations.map((item) => (
-                <ObservationCard entity={item} key={item.id} />
-              ))}
-            </div>
-          )}
-        </section>
+      <div className="tab-bar" role="tablist">
+        <button
+          role="tab"
+          aria-selected={tab === "graph"}
+          className={tab === "graph" ? "active" : ""}
+          onClick={() => setTab("graph")}
+        >
+          Graph
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === "map"}
+          className={tab === "map" ? "active" : ""}
+          onClick={() => setTab("map")}
+        >
+          Map
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === "timeline"}
+          className={tab === "timeline" ? "active" : ""}
+          onClick={() => setTab("timeline")}
+        >
+          Timeline
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === "list"}
+          className={tab === "list" ? "active" : ""}
+          onClick={() => setTab("list")}
+        >
+          List
+        </button>
       </div>
+
+      {tab === "graph" && (
+        <section className="tab-panel graph-panel">
+          {entities.length === 0 ? (
+            <p className="panel-empty">No entities to graph yet.</p>
+          ) : (
+            <GraphView entities={entities} relationships={relationships} />
+          )}
+        </section>
+      )}
+
+      {tab === "map" && (
+        <section className="tab-panel map-panel">
+          <MapView observations={observations} />
+        </section>
+      )}
+
+      {tab === "timeline" && (
+        <section className="tab-panel timeline-panel">
+          <TimelineView events={timeline} />
+        </section>
+      )}
+
+      {tab === "list" && (
+        <div className="dashboard-grid">
+          <section className="panel evidence-panel">
+            <div className="section-heading">
+              <h2>Evidence register</h2>
+              <span>Immutable source objects</span>
+            </div>
+            {evidence.length === 0 ? (
+              <p className="panel-empty">Upload an image to begin analysis.</p>
+            ) : (
+              <div className="evidence-list">
+                {evidence.map((item) => (
+                  <Link
+                    key={item.id}
+                    to={`/investigations/${id}/evidence/${encodeURIComponent(item.id)}`}
+                    className="evidence-row"
+                  >
+                    <div className="thumb-placeholder">IMG</div>
+                    <div>
+                      <strong>{item.mime_type}</strong>
+                      <code>{shortHash(item.id)}</code>
+                      <small>{formatBytes(item.size_bytes)} · {item.acquisition_method}</small>
+                    </div>
+                    <span>View →</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="panel observations-panel">
+            <div className="section-heading">
+              <h2>Extracted observations</h2>
+              <span>Unverified machine output</span>
+            </div>
+            {observations.length === 0 ? (
+              <p className="panel-empty">No observations recorded.</p>
+            ) : (
+              <div className="observation-list">
+                {observations.map((item) => (
+                  <ObservationCard entity={item} key={item.id} />
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="panel relationships-panel">
+            <div className="section-heading">
+              <h2>Candidate relationships</h2>
+              <span>Human verification required</span>
+            </div>
+            {relationships.length === 0 ? (
+              <p className="panel-empty">Run resolve to propose candidates.</p>
+            ) : (
+              <div className="relationship-list">
+                {relationships.map((rel) => (
+                  <article className="relationship-card" key={rel.id}>
+                    <strong>{rel.relationship_type}</strong>
+                    <code>
+                      {shortHash(rel.source_entity_id)} → {shortHash(rel.target_entity_id)}
+                    </code>
+                    <span>{rel.verification_state || "PENDING"}</span>
+                    <div className="verify-actions">
+                      <button
+                        disabled={Boolean(busy)}
+                        onClick={() =>
+                          void runAction("verify", () =>
+                            api.verifyRelationship(id, rel.id, "VERIFICATION_STATE_VERIFIED"),
+                          )
+                        }
+                        type="button"
+                      >
+                        Verify
+                      </button>
+                      <button
+                        disabled={Boolean(busy)}
+                        onClick={() =>
+                          void runAction("verify", () =>
+                            api.verifyRelationship(id, rel.id, "VERIFICATION_STATE_REJECTED"),
+                          )
+                        }
+                        type="button"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
     </Shell>
   );
 }

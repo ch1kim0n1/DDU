@@ -3,6 +3,16 @@ const API_URL = (import.meta.env.VITE_DDU_API_URL || "http://localhost:8001").re
   "",
 );
 
+const ROLE_KEY = "ddu.role";
+
+export function getRole() {
+  return localStorage.getItem(ROLE_KEY) || "analyst";
+}
+
+export function setRole(role: string) {
+  localStorage.setItem(ROLE_KEY, role);
+}
+
 export interface Investigation {
   id: string;
   name: string;
@@ -39,14 +49,40 @@ export interface RunSummary {
   job_name: string;
 }
 
+export interface Relationship {
+  id: string;
+  investigation_id: string;
+  source_entity_id: string;
+  target_entity_id: string;
+  relationship_type: string;
+  verification_state?: string;
+  confidence?: number | {value?: number};
+  attributes?: Record<string, unknown>;
+  provenance?: Record<string, unknown>;
+  created_at?: string;
+}
+
 export interface WorkflowResult {
   evidence: Evidence;
   evidence_id: string;
   entities: Entity[];
 }
 
+export interface TimelineEvent {
+  id?: string;
+  timestamp?: string;
+  label?: string;
+  type?: string;
+  entity_id?: string;
+  evidence_id?: string;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, init);
+  const headers = new Headers(init?.headers || {});
+  if (!headers.has("X-DDU-Role")) {
+    headers.set("X-DDU-Role", getRole());
+  }
+  const response = await fetch(`${API_URL}${path}`, {...init, headers});
   if (!response.ok) {
     const detail = await response.text();
     throw new Error(detail || `${response.status} ${response.statusText}`);
@@ -78,6 +114,65 @@ export const api = {
     );
   },
 
+  processUsername: (id: string, username: string) =>
+    request(`/v1/investigations/${encodeURIComponent(id)}/usernames`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({username}),
+    }),
+
+  processURL: (id: string, url: string, mode = "auto") =>
+    request(`/v1/investigations/${encodeURIComponent(id)}/urls`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({url, mode, process: true}),
+    }),
+
+  resolve: (id: string) =>
+    request(`/v1/investigations/${encodeURIComponent(id)}/resolve`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({threshold: 0.5}),
+    }),
+
+  verifyRelationship: (id: string, relationshipId: string, state: string) =>
+    request(
+      `/v1/investigations/${encodeURIComponent(id)}/relationships/${encodeURIComponent(relationshipId)}/verification`,
+      {
+        method: "PATCH",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({verification_state: state}),
+      },
+    ),
+
+  timeline: async (id: string) =>
+    (
+      await request<{events: TimelineEvent[]}>(
+        `/v1/investigations/${encodeURIComponent(id)}/timeline`,
+      )
+    ).events || [],
+
+  createSnapshot: (id: string, label: string) =>
+    request(`/v1/investigations/${encodeURIComponent(id)}/snapshots`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({label}),
+    }),
+
+  generateReport: (id: string) =>
+    request(`/v1/investigations/${encodeURIComponent(id)}/reports`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: "{}",
+    }),
+
+  runAgent: (id: string, mode: string, body: Record<string, unknown> = {}) =>
+    request(`/v1/investigations/${encodeURIComponent(id)}/agent`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({mode, ...body}),
+    }),
+
   listEntities: async (id: string) =>
     (
       await request<{entities: Entity[]}>(
@@ -100,6 +195,11 @@ export const api = {
     request<{runs: RunSummary[]; count: number}>(
       `/v1/investigations/${encodeURIComponent(id)}/lineage`,
     ),
+
+  listRelationships: (id: string) =>
+    request<{relationships: Relationship[]}>(
+      `/v1/investigations/${encodeURIComponent(id)}/relationships`,
+    ).then((r) => r.relationships || []),
 
   listEvidence: async (id: string) =>
     (

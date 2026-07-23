@@ -48,9 +48,20 @@ func main() {
 		Vision:     lookupEnv("DDU_VISION_URL", "http://localhost:8101"),
 		OCR:        lookupEnv("DDU_OCR_URL", "http://localhost:8103"),
 		Geo:        lookupEnv("DDU_GEO_URL", "http://localhost:8105"),
+		Face:       lookupEnv("DDU_FACE_URL", "http://localhost:8102"),
+		Audio:      lookupEnv("DDU_AUDIO_URL", "http://localhost:8104"),
+		Temporal:   lookupEnv("DDU_TEMPORAL_URL", "http://localhost:8108"),
 		GraphStore: lookupEnv("DDU_GRAPH_STORE_URL", "http://localhost:8004"),
 		Lineage:    lookupEnv("DDU_LINEAGE_URL", "http://localhost:8006"),
 		Storage:    lookupEnv("DDU_STORAGE_URL", "http://localhost:8003"),
+		Discovery:  lookupEnv("DDU_DISCOVERY_URL", "http://localhost:8009"),
+		OSINT:      lookupEnv("DDU_OSINT_URL", "http://localhost:8110"),
+		Collector:  lookupEnv("DDU_COLLECTOR_URL", "http://localhost:8008"),
+		Webcapture: lookupEnv("DDU_WEBCAPTURE_URL", "http://localhost:8007"),
+		Resolution: lookupEnv("DDU_RESOLUTION_URL", "http://localhost:8111"),
+		Agent:      lookupEnv("DDU_AGENT_URL", "http://localhost:8109"),
+		Ontology:   lookupEnv("DDU_ONTOLOGY_URL", "http://localhost:8107"),
+		Vector:     lookupEnv("DDU_VECTOR_URL", "http://localhost:8005"),
 	}
 	lineage, err := lineageemitter.New(versionInfo())
 	if err != nil {
@@ -124,9 +135,16 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 			"POST /v1/investigations",
 			"GET /v1/investigations/{id}",
 			"POST /v1/investigations/{id}/images",
+			"POST /v1/investigations/{id}/usernames",
+			"POST /v1/investigations/{id}/urls",
+			"POST /v1/investigations/{id}/resolve",
+			"POST /v1/investigations/{id}/agent",
+			"GET /v1/investigations/{id}/timeline",
 			"GET /v1/investigations/{id}/entities",
 			"GET /v1/investigations/{id}/observations",
 			"GET /v1/investigations/{id}/lineage",
+			"GET /v1/investigations/{id}/relationships",
+			"GET /v1/plugins",
 		},
 	})
 }

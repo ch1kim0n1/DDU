@@ -118,6 +118,7 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 			"GET /versionz",
 			"POST /v1/ingest/image",
 			"POST /v1/ingest/url",
+			"POST /v1/ingest/video",
 		},
 	})
 }

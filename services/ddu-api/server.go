@@ -41,6 +41,7 @@ func newHandler(urls serviceURLs, client *http.Client, lineage lineageEmitter) h
 	}
 	router := chi.NewRouter()
 	router.Use(corsMiddleware)
+	router.Use(s.rbacMiddleware)
 	router.Get("/healthz", s.healthz)
 	router.Get("/versionz", versionzHandler)
 	router.Get("/", rootHandler)
@@ -48,16 +49,31 @@ func newHandler(urls serviceURLs, client *http.Client, lineage lineageEmitter) h
 	router.Get("/v1/investigations", s.listInvestigations)
 	router.Get("/v1/investigations/{id}", s.getInvestigation)
 	router.Post("/v1/investigations/{id}/images", s.processImage)
+	router.Post("/v1/investigations/{id}/usernames", s.processUsername)
+	router.Post("/v1/investigations/{id}/urls", s.processURL)
+	router.Post("/v1/investigations/{id}/resolve", s.resolveInvestigation)
+	router.Post("/v1/investigations/{id}/contradict", s.contradictInvestigation)
+	router.Get("/v1/investigations/{id}/timeline", s.timeline)
+	router.Post("/v1/investigations/{id}/snapshots", s.createSnapshot)
+	router.Get("/v1/investigations/{id}/snapshots", s.listSnapshots)
+	router.Post("/v1/investigations/{id}/reports", s.generateReport)
+	router.Get("/v1/investigations/{id}/replay", s.replayInvestigation)
+	router.Post("/v1/investigations/{id}/agent", s.runAgent)
+	router.Get("/v1/investigations/{id}/members", s.manageMembers)
+	router.Post("/v1/investigations/{id}/members", s.manageMembers)
+	router.Patch("/v1/investigations/{id}/relationships/{relationshipID}/verification", s.verifyRelationship)
 	router.Get("/v1/investigations/{id}/entities", s.listEntities)
 	router.Get("/v1/investigations/{id}/observations", s.listObservations)
 	router.Get("/v1/investigations/{id}/lineage", s.listLineage)
 	router.Get("/v1/investigations/{id}/evidence", s.listEvidence)
 	router.Get("/v1/investigations/{id}/evidence/{evidenceID}", s.getEvidence)
+	router.Get("/v1/investigations/{id}/relationships", s.listRelationships)
+	router.Get("/v1/plugins", s.pluginCatalog)
 	return router
 }
 
 func (s *apiServer) healthz(w http.ResponseWriter, r *http.Request) {
-	dependencies := map[string]string{
+	required := map[string]string{
 		"ddu-ingest":      s.downstream.urls.Ingest,
 		"ddu-vision":      s.downstream.urls.Vision,
 		"ddu-ocr":         s.downstream.urls.OCR,
@@ -65,6 +81,25 @@ func (s *apiServer) healthz(w http.ResponseWriter, r *http.Request) {
 		"ddu-graph-store": s.downstream.urls.GraphStore,
 		"ddu-lineage":     s.downstream.urls.Lineage,
 		"ddu-storage":     s.downstream.urls.Storage,
+	}
+	optional := map[string]string{
+		"ddu-discovery":  s.downstream.urls.Discovery,
+		"ddu-osint":      s.downstream.urls.OSINT,
+		"ddu-collector":  s.downstream.urls.Collector,
+		"ddu-webcapture": s.downstream.urls.Webcapture,
+		"ddu-resolution": s.downstream.urls.Resolution,
+		"ddu-agent":      s.downstream.urls.Agent,
+		"ddu-face":       s.downstream.urls.Face,
+		"ddu-audio":      s.downstream.urls.Audio,
+		"ddu-temporal":   s.downstream.urls.Temporal,
+		"ddu-vector":     s.downstream.urls.Vector,
+	}
+	dependencies := map[string]string{}
+	for name, baseURL := range required {
+		dependencies[name] = baseURL
+	}
+	for name, baseURL := range optional {
+		dependencies[name] = baseURL
 	}
 	type result struct {
 		name string
@@ -79,13 +114,18 @@ func (s *apiServer) healthz(w http.ResponseWriter, r *http.Request) {
 		}(name, baseURL)
 	}
 	statuses := make([]map[string]any, 0, len(dependencies))
-	healthy := true
+	requiredHealthy := true
+	optionalHealthy := true
 	for range dependencies {
 		item := <-results
 		status := map[string]any{"name": item.name, "ok": item.err == nil}
 		if item.err != nil {
-			healthy = false
 			status["detail"] = item.err.Error()
+			if _, isRequired := required[item.name]; isRequired {
+				requiredHealthy = false
+			} else {
+				optionalHealthy = false
+			}
 		} else {
 			status["detail"] = "reachable"
 		}
@@ -94,14 +134,18 @@ func (s *apiServer) healthz(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(statuses, func(i, j int) bool {
 		return statuses[i]["name"].(string) < statuses[j]["name"].(string)
 	})
-	if !healthy {
+	if !requiredHealthy {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 			"state": "UNHEALTHY", "service": serviceName, "dependencies": statuses,
 		})
 		return
 	}
+	state := "HEALTHY"
+	if !optionalHealthy {
+		state = "DEGRADED"
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"state": "HEALTHY", "service": serviceName, "dependencies": statuses,
+		"state": state, "service": serviceName, "dependencies": statuses,
 	})
 }
 
@@ -179,64 +223,15 @@ func (s *apiServer) processImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type inferenceResult struct {
-		service      string
-		observations []Observation
-		err          error
-	}
-	request := map[string]any{
-		"evidence_id": evidence.ID, "investigation_id": investigationID,
-	}
-	calls := []struct {
-		service, baseURL, endpoint string
-		payload                    map[string]any
-	}{
-		{"ddu-vision", s.downstream.urls.Vision, "/v1/detect", map[string]any{
-			"evidence_id": evidence.ID, "investigation_id": investigationID,
-			"prompts": []string{"person", "vehicle", "object"},
-		}},
-		{"ddu-ocr", s.downstream.urls.OCR, "/v1/ocr", request},
-		{"ddu-geo", s.downstream.urls.Geo, "/v1/locate", map[string]any{
-			"evidence_id": evidence.ID, "investigation_id": investigationID, "top_k": 5,
-		}},
-	}
-	results := make(chan inferenceResult, len(calls))
-	for _, call := range calls {
-		go func(call struct {
-			service, baseURL, endpoint string
-			payload                    map[string]any
-		}) {
-			observations, invokeErr := s.downstream.invokeML(
-				r.Context(), call.baseURL, call.endpoint, call.payload,
-			)
-			results <- inferenceResult{call.service, observations, invokeErr}
-		}(call)
-	}
-	observations := make([]Observation, 0)
-	for range calls {
-		result := <-results
-		if result.err != nil {
-			s.fail(r.Context(), runID, "process-image", investigationID)
-			writeError(w, http.StatusBadGateway, result.service+" failed: "+result.err.Error())
-			return
-		}
-		observations = append(observations, result.observations...)
+	observations, entities, processErr := s.runPerception(r.Context(), investigationID, evidence.ID)
+	if processErr != nil {
+		s.fail(r.Context(), runID, "process-image", investigationID)
+		writeError(w, http.StatusBadGateway, "perception failed: "+processErr.Error())
+		return
 	}
 	sort.Slice(observations, func(i, j int) bool {
 		return observations[i].ID < observations[j].ID
 	})
-
-	entities := make([]Entity, 0, len(observations))
-	for _, observation := range observations {
-		entity := observationEntity(observation)
-		created, createErr := s.downstream.createEntity(r.Context(), entity)
-		if createErr != nil {
-			s.fail(r.Context(), runID, "process-image", investigationID)
-			writeError(w, http.StatusBadGateway, "observation persistence failed: "+createErr.Error())
-			return
-		}
-		entities = append(entities, created)
-	}
 	outputs := []lineageemitter.Output{{
 		Namespace: investigationID, Name: evidence.ID, Type: "DDU.EVIDENCE",
 	}}
@@ -338,6 +333,22 @@ func (s *apiServer) getEvidence(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, evidence)
 }
 
+func (s *apiServer) listRelationships(w http.ResponseWriter, r *http.Request) {
+	investigationID := chi.URLParam(r, "id")
+	if _, ok := s.investigation(investigationID); !ok {
+		writeError(w, http.StatusNotFound, "investigation not found")
+		return
+	}
+	relationships, err := s.downstream.listRelationships(r.Context(), investigationID)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	runID := s.start(r.Context(), "list-relationships", investigationID, nil)
+	s.complete(r.Context(), runID, "list-relationships", investigationID, nil)
+	writeJSON(w, http.StatusOK, relationships)
+}
+
 func (s *apiServer) investigation(id string) (Investigation, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -419,8 +430,8 @@ func investigationFacet(investigationID string) map[string]string {
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Investigation-Id")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Investigation-Id, X-DDU-Role")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
