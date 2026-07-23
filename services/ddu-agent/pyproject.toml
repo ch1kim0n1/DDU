@@ -13,11 +13,8 @@ dependencies = [
     "httpx==0.28.1",
     "pydantic==2.13.4",
     "uvicorn[standard]==0.44.0",
-]
-
-[project.optional-dependencies]
-langgraph = [
-    "langgraph==0.2.0",
+    "langgraph==0.2.74",
+    "langchain-core==0.3.28",
 ]
 
 [tool.setuptools]

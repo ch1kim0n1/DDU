@@ -56,9 +56,12 @@ graph_client = httpx.AsyncClient(base_url=GRAPH_STORE_URL, timeout=10.0)
 lineage = LineageEmitter(VERSION)
 app = build_scaffold_app(VERSION)
 
-# In-memory custom ontology registry (investigation-scoped). Phase 3 builder.
+# Cache + Neo4j (via graph-store) persistence for custom ontology types.
+# OpenSPG uses Neo4j as its graph engine; custom types are stored as
+# ENTITY_TYPE_CLAIM registry nodes with ddu_ontology_type=1.
 _custom_types: dict[str, dict[str, dict[str, Any]]] = {}
 _next_type_number = 1000
+_loaded_investigations: set[str] = set()
 
 
 class CustomTypeRequest(BaseModel):
@@ -67,6 +70,69 @@ class CustomTypeRequest(BaseModel):
     description: str = ""
     parent_type: str = "ENTITY_TYPE_OBJECT"
     attributes: list[str] = Field(default_factory=list)
+
+
+async def _load_custom_types(investigation_id: str) -> None:
+    if investigation_id in _loaded_investigations:
+        return
+    try:
+        response = await graph_client.get(
+            "/v1/entities",
+            params={"investigation_id": investigation_id, "type": "ENTITY_TYPE_CLAIM"},
+        )
+        response.raise_for_status()
+        registry = _custom_types.setdefault(investigation_id, {})
+        for entity in response.json().get("entities", []):
+            attrs = entity.get("attributes", {}) or {}
+            if attrs.get("ddu_ontology_type") != "1":
+                continue
+            name = attrs.get("type_name", "")
+            if not name:
+                continue
+            number = int(attrs.get("type_number", "1000"))
+            global _next_type_number
+            _next_type_number = max(_next_type_number, number + 1)
+            registry[name] = {
+                "name": name,
+                "number": number,
+                "description": attrs.get("description", ""),
+                "parent_type": attrs.get("parent_type", "ENTITY_TYPE_OBJECT"),
+                "attributes": [a for a in attrs.get("attribute_keys", "").split(",") if a],
+                "investigation_id": investigation_id,
+                "created_at": attrs.get("created_at") or entity.get("created_at", ""),
+                "graph_entity_id": entity.get("id"),
+            }
+        _loaded_investigations.add(investigation_id)
+    except httpx.HTTPError as exc:
+        log.warning("ontology registry load failed for %s: %s", investigation_id, exc)
+
+
+async def _persist_custom_type(meta: dict[str, Any]) -> dict[str, Any]:
+    payload = {
+        "investigation_id": meta["investigation_id"],
+        "type": "ENTITY_TYPE_CLAIM",
+        "attributes": {
+            "ddu_ontology_type": "1",
+            "type_name": meta["name"],
+            "type_number": str(meta["number"]),
+            "description": meta.get("description", ""),
+            "parent_type": meta.get("parent_type", "ENTITY_TYPE_OBJECT"),
+            "attribute_keys": ",".join(meta.get("attributes") or []),
+            "created_at": meta.get("created_at", ""),
+            "backend": "openspg-neo4j",
+        },
+        "evidence_ids": [],
+        "provenance": {
+            "produced_by_service": VERSION.service,
+            "job_name": "ddu-ontology:create-type",
+            "extraction_method": "openspg-neo4j-registry",
+        },
+    }
+    response = await graph_client.post("/v1/entities", json=payload)
+    response.raise_for_status()
+    created = response.json()
+    meta["graph_entity_id"] = created.get("id")
+    return meta
 
 
 def _all_types(investigation_id: str | None = None) -> dict[str, int]:
@@ -93,6 +159,8 @@ def _normalize_type_name(name: str) -> str:
 
 @app.get("/v1/entity-types")
 async def entity_types(investigation_id: str | None = None) -> dict[str, Any]:
+    if investigation_id:
+        await _load_custom_types(investigation_id)
     types = _all_types(investigation_id)
     custom = []
     if investigation_id:
@@ -103,13 +171,15 @@ async def entity_types(investigation_id: str | None = None) -> dict[str, Any]:
             for name, number in types.items()
         ],
         "custom_types": custom,
+        "backend": "openspg-neo4j",
     }
 
 
 @app.post("/v1/entity-types", status_code=201)
 async def create_entity_type(request: CustomTypeRequest) -> dict[str, Any]:
-    """Phase 3 custom ontology builder — register investigation-scoped entity types."""
+    """Custom ontology builder — persist investigation-scoped types to Neo4j/OpenSPG."""
     global _next_type_number
+    await _load_custom_types(request.investigation_id)
     name = _normalize_type_name(request.name)
     if name in CORE_ENTITY_TYPES:
         raise HTTPException(status_code=409, detail="cannot redefine a core entity type")
@@ -137,6 +207,16 @@ async def create_entity_type(request: CustomTypeRequest) -> dict[str, Any]:
         "investigation_id": request.investigation_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    try:
+        meta = await _persist_custom_type(meta)
+    except httpx.HTTPError as exc:
+        lineage.emit(Event(
+            event_type="FAIL",
+            run_id=run_id,
+            job_name="ddu-ontology:create-type",
+            facets=facets,
+        ))
+        raise HTTPException(status_code=503, detail=f"ontology persistence failed: {exc}") from exc
     _next_type_number += 1
     registry[name] = meta
     lineage.emit(Event(
@@ -155,6 +235,8 @@ async def create_entity_type(request: CustomTypeRequest) -> dict[str, Any]:
 
 @app.get("/v1/schema")
 async def schema(investigation_id: str | None = None) -> dict[str, Any]:
+    if investigation_id:
+        await _load_custom_types(investigation_id)
     return {
         "core_entity_types": list(CORE_ENTITY_TYPES)[1:],
         "custom_types": (
@@ -163,8 +245,8 @@ async def schema(investigation_id: str | None = None) -> dict[str, Any]:
             else [item for reg in _custom_types.values() for item in reg.values()]
         ),
         "builder": {
-            "mode": "in-process-registry",
-            "note": "OpenSPG backend optional; validation stays DDU-native.",
+            "mode": "openspg-neo4j-registry",
+            "note": "Custom types persist as Neo4j Claim nodes via ddu-graph-store (OpenSPG backend).",
         },
     }
 

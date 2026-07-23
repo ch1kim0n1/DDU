@@ -21,6 +21,8 @@ from pydantic import BaseModel, Field
 
 from ddu_common.app import build_scaffold_app
 from ddu_common.lineage import Event, Input, LineageEmitter, Output
+from ddu_common.runtime import model_mode_is_stub
+import correlate
 from ddu_common.version import ServiceVersion, from_env
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -35,7 +37,7 @@ VERSION = from_env(ServiceVersion(
 
 GRAPH_STORE_URL = os.environ.get("DDU_GRAPH_STORE_URL", "http://localhost:8004").rstrip("/")
 WEBCAPTURE_URL = os.environ.get("DDU_WEBCAPTURE_URL", "http://localhost:8007").rstrip("/")
-STUB = os.environ.get("MODEL_MODE", "").lower() == "stub"
+STUB = model_mode_is_stub()
 
 graph_client = httpx.AsyncClient(base_url=GRAPH_STORE_URL, timeout=30.0)
 webcapture_client = httpx.AsyncClient(base_url=WEBCAPTURE_URL, timeout=60.0)
@@ -122,6 +124,63 @@ async def _relationships(investigation_id: str) -> list[dict[str, Any]]:
     return list(response.json().get("relationships", []))
 
 
+
+async def _persist_snapshot(investigation_id: str, snapshot: dict[str, Any]) -> None:
+    """Best-effort durable snapshot in Neo4j via graph-store."""
+    try:
+        await graph_client.post("/v1/entities", json={
+            "investigation_id": investigation_id,
+            "type": "ENTITY_TYPE_CLAIM",
+            "attributes": {
+                "ddu_intel_snapshot": "1",
+                "captured_at": snapshot.get("captured_at", _now()),
+                "entity_count": str(snapshot.get("entity_count", 0)),
+                "relationship_count": str(snapshot.get("relationship_count", 0)),
+                "entity_ids": ",".join(snapshot.get("entity_ids", [])[:200]),
+                "relationship_ids": ",".join(snapshot.get("relationship_ids", [])[:200]),
+            },
+            "evidence_ids": [],
+            "provenance": {"produced_by_service": VERSION.service, "job_name": "ddu-intel:temporal-diff"},
+        })
+    except httpx.HTTPError as exc:
+        log.warning("intel snapshot persist failed: %s", exc)
+
+
+async def _load_snapshots(investigation_id: str) -> list[dict[str, Any]]:
+    cached = _graph_snapshots.get(investigation_id)
+    if cached:
+        return cached
+    try:
+        response = await graph_client.get(
+            "/v1/entities",
+            params={"investigation_id": investigation_id, "type": "ENTITY_TYPE_CLAIM"},
+        )
+        response.raise_for_status()
+        snaps = []
+        for entity in response.json().get("entities", []):
+            attrs = entity.get("attributes") or {}
+            if attrs.get("ddu_intel_snapshot") != "1":
+                continue
+            snaps.append({
+                "captured_at": attrs.get("captured_at"),
+                "entity_ids": [x for x in attrs.get("entity_ids", "").split(",") if x],
+                "relationship_ids": [x for x in attrs.get("relationship_ids", "").split(",") if x],
+                "entity_count": int(attrs.get("entity_count") or 0),
+                "relationship_count": int(attrs.get("relationship_count") or 0),
+            })
+        snaps.sort(key=lambda s: s.get("captured_at") or "")
+        _graph_snapshots[investigation_id] = snaps
+        return snaps
+    except httpx.HTTPError:
+        return []
+
+
+async def _graph_context(investigation_id: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    try:
+        return await _entities(investigation_id), await _relationships(investigation_id)
+    except httpx.HTTPError:
+        return [], []
+
 def _subject_seed(request: SubjectRequest) -> str:
     return (request.subject or request.entity_id or "unknown-subject").strip()
 
@@ -188,43 +247,12 @@ async def capabilities() -> dict[str, Any]:
 async def current_location(request: SubjectRequest) -> dict[str, Any]:
     run_id, facets = _start("location-current", request.investigation_id, _subject_seed(request))
     try:
-        seed = _subject_seed(request)
-        digest = hashlib.sha256(seed.encode()).hexdigest()
-        hypotheses = [
-            _hypothesis(
-                request.investigation_id,
-                "Austin, TX",
-                0.71,
-                hypothesis_type="HYPOTHESIS_CURRENT_LOCATION",
-                evidence_ids=[f"sha256:{digest[:16]}"],
-                attributes={
-                    "lat": 30.2672,
-                    "lon": -97.7431,
-                    "uncertainty_km": 12.5,
-                    "freshness": _now(),
-                    "signals": ["recent_public_post", "ocr_venue", "timezone_pattern"],
-                },
-                contradictions=["one landmark feature resembles Phoenix metro"],
-                run_id=run_id,
-                job="ddu-intel:location-current",
-            ),
-            _hypothesis(
-                request.investigation_id,
-                "Round Rock, TX",
-                0.48,
-                hypothesis_type="HYPOTHESIS_CURRENT_LOCATION",
-                evidence_ids=[f"sha256:{digest[16:32]}"],
-                attributes={
-                    "lat": 30.5083,
-                    "lon": -97.6789,
-                    "uncertainty_km": 25.0,
-                    "freshness": (datetime.now(timezone.utc) - timedelta(days=3)).isoformat(),
-                    "signals": ["recurring_location_history"],
-                },
-                run_id=run_id,
-                job="ddu-intel:location-current",
-            ),
-        ][: request.max_results]
+        entities, _ = await _graph_context(request.investigation_id)
+        hypotheses = correlate.location_hypotheses(
+            request.investigation_id, _subject_seed(request), entities,
+            hypothesis=_hypothesis, run_id=run_id, job="ddu-intel:location-current",
+            max_results=request.max_results,
+        )
     except Exception as exc:  # noqa: BLE001
         _fail(run_id, "location-current", facets)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -235,71 +263,33 @@ async def current_location(request: SubjectRequest) -> dict[str, Any]:
 @app.post("/v1/household")
 async def household(request: SubjectRequest) -> dict[str, Any]:
     run_id, facets = _start("household", request.investigation_id, _subject_seed(request))
-    seed = _subject_seed(request)
-    people = [
-        ("possible_parent", f"{seed}-parent-a", 0.62),
-        ("possible_sibling", f"{seed}-sibling-a", 0.55),
-        ("possible_partner", f"{seed}-partner-a", 0.44),
-        ("household_member", f"{seed}-roommate-a", 0.51),
-    ]
-    relationships = [
-        _hypothesis(
-            request.investigation_id,
-            f"{rel_type}:{name}",
-            score,
-            hypothesis_type="HYPOTHESIS_HOUSEHOLD_RELATIONSHIP",
-            attributes={
-                "relationship_type": rel_type,
-                "related_entity_label": name,
-                "signals": ["shared_address_public_record", "graph_overlap"],
-                "first_observed": "2021-01-01",
-                "last_observed": "2026-01-01",
-            },
-            run_id=run_id,
-            job="ddu-intel:household",
-        )
-        for rel_type, name, score in people[: request.max_results]
-    ]
-    _complete(run_id, "household", request.investigation_id, facets, [h["id"] for h in relationships])
-    return {"candidates": relationships, "risk_tier": "S", "requires_human_review": True}
+    entities, relationships = await _graph_context(request.investigation_id)
+    relationships_h = correlate.related_person_hypotheses(
+        request.investigation_id, _subject_seed(request), entities, relationships,
+        hypothesis=_hypothesis, run_id=run_id, job="ddu-intel:household",
+        max_results=request.max_results, hypothesis_type="HYPOTHESIS_HOUSEHOLD_RELATIONSHIP",
+    )
+    _complete(run_id, "household", request.investigation_id, facets, [h["id"] for h in relationships_h])
+    return {"candidates": relationships_h, "risk_tier": "S", "requires_human_review": True}
 
 
 @app.post("/v1/property")
 async def property_records(request: SubjectRequest) -> dict[str, Any]:
     run_id, facets = _start("property", request.investigation_id, _subject_seed(request))
-    seed = _subject_seed(request)
-    records = [
-        _hypothesis(
-            request.investigation_id,
-            "123 Example St, Austin, TX",
-            0.67,
+    entities, _ = await _graph_context(request.investigation_id)
+    records = correlate.record_hypotheses(
+        request.investigation_id, _subject_seed(request), entities,
+        hypothesis=_hypothesis, run_id=run_id, job="ddu-intel:property",
+        max_results=request.max_results, record_type_prefix="property",
+    )
+    if not records:
+        # Property without document evidence stays low-confidence deferred.
+        records = [_hypothesis(
+            request.investigation_id, "insufficient-property-evidence", 0.2,
             hypothesis_type="HYPOTHESIS_PROPERTY_LINK",
-            attributes={
-                "parcel_id": f"PARCEL-{hashlib.md5(seed.encode()).hexdigest()[:8]}",
-                "jurisdiction": "Travis County, TX",
-                "owner_name_match": seed,
-                "signals": ["assessor_name_match", "mailing_address_overlap"],
-                "source_url": "https://example.public.records/assessor/stub",
-                "record_id": "TAX-STUB-001",
-                "reliability": 0.7,
-            },
-            run_id=run_id,
-            job="ddu-intel:property",
-        ),
-        _hypothesis(
-            request.investigation_id,
-            "Historical ownership: 2018-2022",
-            0.53,
-            hypothesis_type="HYPOTHESIS_PROPERTY_HISTORY",
-            attributes={
-                "valid_from": "2018-03-01",
-                "valid_to": "2022-08-15",
-                "signals": ["deed_index_stub"],
-            },
-            run_id=run_id,
-            job="ddu-intel:property",
-        ),
-    ]
+            attributes={"signals": ["insufficient_graph_evidence"], "note": "No DOCUMENT/CLAIM property evidence in graph."},
+            run_id=run_id, job="ddu-intel:property",
+        )]
     _complete(run_id, "property", request.investigation_id, facets, [h["id"] for h in records])
     return {"records": records, "risk_tier": "S", "requires_human_review": True}
 
@@ -307,34 +297,12 @@ async def property_records(request: SubjectRequest) -> dict[str, Any]:
 @app.post("/v1/identity/resolve")
 async def identity_resolve(request: SubjectRequest) -> dict[str, Any]:
     run_id, facets = _start("identity-resolve", request.investigation_id, _subject_seed(request))
-    try:
-        entities = await _entities(request.investigation_id)
-    except httpx.HTTPError:
-        entities = []
-    seed = _subject_seed(request)
-    links = []
-    platforms = ["github", "twitter", "instagram", "linkedin"]
-    for index, platform in enumerate(platforms[: request.max_results]):
-        score = max(0.35, 0.88 - index * 0.12)
-        links.append(_hypothesis(
-            request.investigation_id,
-            f"{seed}@{platform}",
-            score,
-            hypothesis_type="HYPOTHESIS_SAME_IDENTITY",
-            attributes={
-                "platform": platform,
-                "signals": [
-                    "username_similarity",
-                    "display_name_similarity",
-                    "geo_overlap",
-                    "temporal_overlap",
-                ][: 4 - index],
-                "entity_count_considered": len(entities),
-            },
-            contradictions=["display_name mismatch on one platform"] if index == 2 else [],
-            run_id=run_id,
-            job="ddu-intel:identity-resolve",
-        ))
+    entities, _ = await _graph_context(request.investigation_id)
+    links = correlate.identity_hypotheses(
+        request.investigation_id, _subject_seed(request), entities,
+        hypothesis=_hypothesis, run_id=run_id, job="ddu-intel:identity-resolve",
+        max_results=request.max_results,
+    )
     _complete(run_id, "identity-resolve", request.investigation_id, facets, [h["id"] for h in links])
     return {"identity_links": links, "risk_tier": "S", "requires_human_review": True}
 
@@ -342,33 +310,12 @@ async def identity_resolve(request: SubjectRequest) -> dict[str, Any]:
 @app.post("/v1/pattern-of-life")
 async def pattern_of_life(request: SubjectRequest) -> dict[str, Any]:
     run_id, facets = _start("pattern-of-life", request.investigation_id, _subject_seed(request))
-    patterns = [
-        _hypothesis(
-            request.investigation_id,
-            "Likely weekday workplace corridor: downtown Austin",
-            0.64,
-            hypothesis_type="HYPOTHESIS_PATTERN_OF_LIFE",
-            attributes={
-                "pattern": "weekday_workplace",
-                "days": ["Mon", "Tue", "Wed", "Thu", "Fri"],
-                "signals": ["recurring_cluster", "temporal_consistency"],
-            },
-            run_id=run_id,
-            job="ddu-intel:pattern-of-life",
-        ),
-        _hypothesis(
-            request.investigation_id,
-            "Likely residence area: north Austin",
-            0.58,
-            hypothesis_type="HYPOTHESIS_PATTERN_OF_LIFE",
-            attributes={
-                "pattern": "residence_area",
-                "signals": ["nighttime_location_bias", "weekend_local_activity"],
-            },
-            run_id=run_id,
-            job="ddu-intel:pattern-of-life",
-        ),
-    ]
+    entities, _ = await _graph_context(request.investigation_id)
+    patterns = correlate.attribute_pattern_hypotheses(
+        request.investigation_id, entities,
+        hypothesis=_hypothesis, run_id=run_id, job="ddu-intel:pattern-of-life",
+        max_results=request.max_results,
+    )
     _complete(run_id, "pattern-of-life", request.investigation_id, facets, [h["id"] for h in patterns])
     return {"patterns": patterns, "risk_tier": "S", "requires_human_review": True}
 
@@ -382,7 +329,7 @@ async def temporal_diff(request: SubjectRequest) -> dict[str, Any]:
     except httpx.HTTPError:
         entities, relationships = [], []
 
-    previous = _graph_snapshots.get(request.investigation_id, [])
+    previous = await _load_snapshots(request.investigation_id)
     current = {
         "captured_at": _now(),
         "entity_ids": sorted(e.get("id", "") for e in entities),
@@ -414,6 +361,7 @@ async def temporal_diff(request: SubjectRequest) -> dict[str, Any]:
         )
     ]
     _graph_snapshots.setdefault(request.investigation_id, []).append(current)
+    await _persist_snapshot(request.investigation_id, current)
     _complete(run_id, "temporal-diff", request.investigation_id, facets, [c["id"] for c in changes])
     return {
         "changes": changes,
@@ -431,23 +379,12 @@ async def temporal_diff(request: SubjectRequest) -> dict[str, Any]:
 @app.post("/v1/social-circle")
 async def social_circle(request: SubjectRequest) -> dict[str, Any]:
     run_id, facets = _start("social-circle", request.investigation_id, _subject_seed(request))
-    seed = _subject_seed(request)
-    associates = []
-    for index in range(min(request.max_results, 5)):
-        associates.append(_hypothesis(
-            request.investigation_id,
-            f"associate-{index + 1}-of-{seed}",
-            max(0.4, 0.8 - index * 0.08),
-            hypothesis_type="HYPOTHESIS_CLOSE_ASSOCIATE",
-            attributes={
-                "relationship_type_hypothesis": ["coworker", "friend", "partner", "classmate", "org_member"][index % 5],
-                "interaction_frequency": ["high", "medium", "low"][index % 3],
-                "temporal_persistence_years": 5 - index,
-                "signals": ["co_appearance", "mutual_connections", "shared_org"],
-            },
-            run_id=run_id,
-            job="ddu-intel:social-circle",
-        ))
+    entities, relationships = await _graph_context(request.investigation_id)
+    associates = correlate.related_person_hypotheses(
+        request.investigation_id, _subject_seed(request), entities, relationships,
+        hypothesis=_hypothesis, run_id=run_id, job="ddu-intel:social-circle",
+        max_results=request.max_results, hypothesis_type="HYPOTHESIS_CLOSE_ASSOCIATE",
+    )
     _complete(run_id, "social-circle", request.investigation_id, facets, [a["id"] for a in associates])
     return {"associates": associates, "risk_tier": "A", "requires_human_review": True}
 
@@ -455,29 +392,12 @@ async def social_circle(request: SubjectRequest) -> dict[str, Any]:
 @app.post("/v1/location/history")
 async def location_history(request: SubjectRequest) -> dict[str, Any]:
     run_id, facets = _start("location-history", request.investigation_id, _subject_seed(request))
-    timeline = [
-        ("2024-06", "Austin, TX", 0.86),
-        ("2024-08", "Dallas, TX", 0.61),
-        ("2024-12", "San Francisco, CA", 0.78),
-        ("2025-01", "Unknown", 0.35),
-    ]
-    events = [
-        _hypothesis(
-            request.investigation_id,
-            f"{when} → {place}",
-            score,
-            hypothesis_type="HYPOTHESIS_HISTORICAL_LOCATION",
-            attributes={
-                "period": when,
-                "place": place,
-                "signals": ["geotagged_media", "ocr", "event_attendance"] if place != "Unknown" else ["conflicting_evidence"],
-            },
-            contradictions=["conflicting public posts"] if place == "Unknown" else [],
-            run_id=run_id,
-            job="ddu-intel:location-history",
-        )
-        for when, place, score in timeline[: request.max_results]
-    ]
+    entities, _ = await _graph_context(request.investigation_id)
+    events = correlate.history_from_entities(
+        request.investigation_id, entities,
+        hypothesis=_hypothesis, run_id=run_id, job="ddu-intel:location-history",
+        max_results=request.max_results,
+    )
     _complete(run_id, "location-history", request.investigation_id, facets, [e["id"] for e in events])
     return {"timeline": events, "risk_tier": "A"}
 
@@ -485,27 +405,12 @@ async def location_history(request: SubjectRequest) -> dict[str, Any]:
 @app.post("/v1/aliases")
 async def aliases(request: SubjectRequest) -> dict[str, Any]:
     run_id, facets = _start("aliases", request.investigation_id, _subject_seed(request))
-    seed = _subject_seed(request)
-    items = [
-        _hypothesis(
-            request.investigation_id,
-            f"{seed}_old",
-            0.73,
-            hypothesis_type="HYPOTHESIS_ALIAS",
-            attributes={"alias_type": "previous_username", "valid_from": "2019", "valid_to": "2022", "signals": ["archived_profile"]},
-            run_id=run_id,
-            job="ddu-intel:aliases",
-        ),
-        _hypothesis(
-            request.investigation_id,
-            f"{seed}.legacy",
-            0.59,
-            hypothesis_type="HYPOTHESIS_ALIAS",
-            attributes={"alias_type": "historical_domain", "signals": ["wayback_stub"]},
-            run_id=run_id,
-            job="ddu-intel:aliases",
-        ),
-    ]
+    entities, _ = await _graph_context(request.investigation_id)
+    items = correlate.alias_hypotheses(
+        request.investigation_id, _subject_seed(request), entities,
+        hypothesis=_hypothesis, run_id=run_id, job="ddu-intel:aliases",
+        max_results=request.max_results,
+    )
     _complete(run_id, "aliases", request.investigation_id, facets, [i["id"] for i in items])
     return {"aliases": items, "risk_tier": "A"}
 
@@ -513,41 +418,12 @@ async def aliases(request: SubjectRequest) -> dict[str, Any]:
 @app.post("/v1/records/fuse")
 async def records_fuse(request: SubjectRequest) -> dict[str, Any]:
     run_id, facets = _start("records-fuse", request.investigation_id, _subject_seed(request))
-    seed = _subject_seed(request)
-    fused = [
-        _hypothesis(
-            request.investigation_id,
-            f"corporate_registration:{seed}",
-            0.66,
-            hypothesis_type="HYPOTHESIS_PUBLIC_RECORD",
-            attributes={
-                "record_type": "corporate_registration",
-                "jurisdiction": "TX",
-                "source_url": "https://example.public.records/corp/stub",
-                "record_identifier": "CORP-STUB-1",
-                "reliability": 0.75,
-                "signals": ["name_match", "address_overlap"],
-            },
-            run_id=run_id,
-            job="ddu-intel:records-fuse",
-        ),
-        _hypothesis(
-            request.investigation_id,
-            f"professional_license:{seed}",
-            0.52,
-            hypothesis_type="HYPOTHESIS_PUBLIC_RECORD",
-            attributes={
-                "record_type": "professional_license",
-                "jurisdiction": "TX",
-                "source_url": "https://example.public.records/license/stub",
-                "record_identifier": "LIC-STUB-1",
-                "reliability": 0.7,
-                "signals": ["name_match"],
-            },
-            run_id=run_id,
-            job="ddu-intel:records-fuse",
-        ),
-    ]
+    entities, _ = await _graph_context(request.investigation_id)
+    fused = correlate.record_hypotheses(
+        request.investigation_id, _subject_seed(request), entities,
+        hypothesis=_hypothesis, run_id=run_id, job="ddu-intel:records-fuse",
+        max_results=request.max_results, record_type_prefix="public_record",
+    )
     _complete(run_id, "records-fuse", request.investigation_id, facets, [f["id"] for f in fused])
     return {"records": fused, "risk_tier": "A"}
 
@@ -601,26 +477,12 @@ async def relationship_strength(request: SubjectRequest) -> dict[str, Any]:
 @app.post("/v1/life-events")
 async def life_events(request: SubjectRequest) -> dict[str, Any]:
     run_id, facets = _start("life-events", request.investigation_id, _subject_seed(request))
-    events = [
-        _hypothesis(
-            request.investigation_id,
-            "Possible relocation to Austin metro",
-            0.63,
-            hypothesis_type="HYPOTHESIS_LIFE_EVENT",
-            attributes={"event_type": "relocation", "approx_date": "2024-06", "signals": ["location_shift", "property_change"]},
-            run_id=run_id,
-            job="ddu-intel:life-events",
-        ),
-        _hypothesis(
-            request.investigation_id,
-            "Possible employer change",
-            0.49,
-            hypothesis_type="HYPOTHESIS_LIFE_EVENT",
-            attributes={"event_type": "job_change", "approx_date": "2025-02", "signals": ["org_affiliation_change"]},
-            run_id=run_id,
-            job="ddu-intel:life-events",
-        ),
-    ]
+    entities, _ = await _graph_context(request.investigation_id)
+    events = correlate.life_event_hypotheses(
+        request.investigation_id, entities,
+        hypothesis=_hypothesis, run_id=run_id, job="ddu-intel:life-events",
+        max_results=request.max_results,
+    )
     _complete(run_id, "life-events", request.investigation_id, facets, [e["id"] for e in events])
     return {"events": events, "risk_tier": "A"}
 
@@ -628,26 +490,12 @@ async def life_events(request: SubjectRequest) -> dict[str, Any]:
 @app.post("/v1/employment")
 async def employment(request: SubjectRequest) -> dict[str, Any]:
     run_id, facets = _start("employment", request.investigation_id, _subject_seed(request))
-    orgs = [
-        _hypothesis(
-            request.investigation_id,
-            "Example Corp",
-            0.7,
-            hypothesis_type="HYPOTHESIS_EMPLOYMENT",
-            attributes={"relationship_type": "works_at", "signals": ["public_profile", "org_mention"]},
-            run_id=run_id,
-            job="ddu-intel:employment",
-        ),
-        _hypothesis(
-            request.investigation_id,
-            "State University",
-            0.56,
-            hypothesis_type="HYPOTHESIS_EMPLOYMENT",
-            attributes={"relationship_type": "studied_at", "signals": ["alumni_directory_stub"]},
-            run_id=run_id,
-            job="ddu-intel:employment",
-        ),
-    ]
+    entities, relationships = await _graph_context(request.investigation_id)
+    orgs = correlate.org_hypotheses(
+        request.investigation_id, entities, relationships,
+        hypothesis=_hypothesis, run_id=run_id, job="ddu-intel:employment",
+        max_results=request.max_results,
+    )
     _complete(run_id, "employment", request.investigation_id, facets, [o["id"] for o in orgs])
     return {"organizations": orgs, "risk_tier": "B"}
 
@@ -655,22 +503,12 @@ async def employment(request: SubjectRequest) -> dict[str, Any]:
 @app.post("/v1/assets")
 async def assets(request: SubjectRequest) -> dict[str, Any]:
     run_id, facets = _start("assets", request.investigation_id, _subject_seed(request))
-    items = [
-        _hypothesis(
-            request.investigation_id,
-            "Recurring gray sedan in public media",
-            0.47,
-            hypothesis_type="HYPOTHESIS_ASSET_ASSOCIATION",
-            attributes={
-                "asset_type": "vehicle",
-                "ownership_claim": False,
-                "signals": ["recurring_object_in_imagery"],
-                "note": "Association is probabilistic; not ownership.",
-            },
-            run_id=run_id,
-            job="ddu-intel:assets",
-        )
-    ]
+    entities, _ = await _graph_context(request.investigation_id)
+    items = correlate.asset_hypotheses(
+        request.investigation_id, entities,
+        hypothesis=_hypothesis, run_id=run_id, job="ddu-intel:assets",
+        max_results=request.max_results,
+    )
     _complete(run_id, "assets", request.investigation_id, facets, [i["id"] for i in items])
     return {"assets": items, "risk_tier": "B", "requires_human_review": True}
 
@@ -720,26 +558,13 @@ async def web_history(request: WebHistoryRequest) -> dict[str, Any]:
 @app.post("/v1/location/fuse")
 async def location_fuse(request: SubjectRequest) -> dict[str, Any]:
     run_id, facets = _start("location-fuse", request.investigation_id, _subject_seed(request))
-    fused = _hypothesis(
-        request.investigation_id,
-        "Austin, TX",
-        0.86,
-        hypothesis_type="HYPOTHESIS_FUSED_LOCATION",
-        attributes={
-            "signals": [
-                "ocr_detected_austin",
-                "geoclip_central_texas",
-                "architecture_consistent",
-                "weather_consistent",
-            ],
-            "contradictions": ["one visual feature resembles Phoenix"],
-            "lat": 30.2672,
-            "lon": -97.7431,
-        },
-        contradictions=["one visual feature resembles Phoenix"],
-        run_id=run_id,
-        job="ddu-intel:location-fuse",
+    entities, _ = await _graph_context(request.investigation_id)
+    fused_list = correlate.location_hypotheses(
+        request.investigation_id, _subject_seed(request), entities,
+        hypothesis=_hypothesis, run_id=run_id, job="ddu-intel:location-fuse",
+        max_results=1, fused=True,
     )
+    fused = fused_list[0]
     _complete(run_id, "location-fuse", request.investigation_id, facets, [fused["id"]])
     return {"fused_location": fused, "risk_tier": "B"}
 

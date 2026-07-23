@@ -125,6 +125,7 @@ services:
       mc mb -p local/ddu-models || true;
       mc mb -p local/ddu-warcs || true;
       mc mb -p local/ddu-frames || true;
+      mc mb -p local/ddu-audit || true;
       mc anonymous set download local/ddu-models || true;
       echo 'MinIO buckets initialized.';
       "

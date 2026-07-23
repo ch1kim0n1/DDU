@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	dduhttpclient "github.com/ddu/ddu-httpclient"
 	lineageemitter "github.com/ddu/ddu-lineage-emitter"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -24,20 +25,35 @@ type lineageEmitter interface {
 }
 
 type apiServer struct {
-	downstream     *downstreamClient
-	lineage        lineageEmitter
-	mu             sync.RWMutex
-	investigations map[string]Investigation
+	downstream *downstreamClient
+	lineage    lineageEmitter
+	store      *investigationStore
+	plugins    map[string]Plugin
+	pluginMtx  sync.RWMutex
 }
 
-func newHandler(urls serviceURLs, client *http.Client, lineage lineageEmitter) http.Handler {
+type Plugin struct {
+	ID          string            `json:"id"`
+	Name        string            `json:"name"`
+	Version     string            `json:"version"`
+	Description string            `json:"description"`
+	Phase       int               `json:"phase"`
+	Endpoint    string            `json:"endpoint"`
+	HealthzURL  string            `json:"healthz_url"`
+	VersionzURL string            `json:"versionz_url"`
+	Metadata    map[string]string `json:"metadata"`
+	RegisteredAt string           `json:"registered_at"`
+}
+
+func newHandler(urls serviceURLs, client *dduhttpclient.Client, lineage lineageEmitter) http.Handler {
 	if client == nil {
-		client = &http.Client{Timeout: 5 * time.Minute}
+		client = dduhttpclient.NewClient(dduhttpclient.Config{Timeout: 5 * time.Minute})
 	}
 	s := &apiServer{
-		downstream:     &downstreamClient{urls: urls, client: client},
-		lineage:        lineage,
-		investigations: map[string]Investigation{},
+		downstream: &downstreamClient{urls: urls, client: client},
+		lineage:    lineage,
+		store:      newInvestigationStore(urls.GraphStore, client),
+		plugins:    make(map[string]Plugin),
 	}
 	router := chi.NewRouter()
 	router.Use(corsMiddleware)
@@ -45,6 +61,7 @@ func newHandler(urls serviceURLs, client *http.Client, lineage lineageEmitter) h
 	router.Get("/healthz", s.healthz)
 	router.Get("/versionz", versionzHandler)
 	router.Get("/", rootHandler)
+	router.Post("/v1/auth/dev-token", s.issueDevToken)
 	router.Post("/v1/investigations", s.createInvestigation)
 	router.Get("/v1/investigations", s.listInvestigations)
 	router.Get("/v1/investigations/{id}", s.getInvestigation)
@@ -63,12 +80,18 @@ func newHandler(urls serviceURLs, client *http.Client, lineage lineageEmitter) h
 	router.Post("/v1/investigations/{id}/members", s.manageMembers)
 	router.Patch("/v1/investigations/{id}/relationships/{relationshipID}/verification", s.verifyRelationship)
 	router.Get("/v1/investigations/{id}/entities", s.listEntities)
+	router.Get("/v1/investigations/{id}/retention-policy", s.getRetentionPolicy)
+	router.Post("/v1/investigations/{id}/retention-policy", s.setRetentionPolicy)
+	router.Post("/v1/investigations/{id}/export", s.exportInvestigation)
+	router.Delete("/v1/investigations/{id}", s.deleteInvestigation)
 	router.Get("/v1/investigations/{id}/observations", s.listObservations)
 	router.Get("/v1/investigations/{id}/lineage", s.listLineage)
 	router.Get("/v1/investigations/{id}/evidence", s.listEvidence)
 	router.Get("/v1/investigations/{id}/evidence/{evidenceID}", s.getEvidence)
 	router.Get("/v1/investigations/{id}/relationships", s.listRelationships)
-	router.Get("/v1/plugins", s.pluginCatalog)
+	router.Get("/v1/plugins", s.listPlugins)
+	router.Post("/v1/plugins", s.registerPlugin)
+	router.Delete("/v1/plugins/{id}", s.deregisterPlugin)
 	router.Get("/v1/ontology/types", s.listOntologyTypes)
 	router.Post("/v1/investigations/{id}/ontology/types", s.createOntologyType)
 	router.Get("/v1/intel/capabilities", s.intelCapabilities)
@@ -180,31 +203,29 @@ func (s *apiServer) createInvestigation(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	id := identityFromContext(r.Context())
 	investigation := Investigation{
 		ID:        uuid.NewString(),
 		Name:      strings.TrimSpace(input.Name),
 		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		Members: []InvestigationMember{{
+			UserID:  id.UserID,
+			Role:    id.Role,
+			AddedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		}},
 	}
 	runID := s.start(r.Context(), "create-investigation", investigation.ID, nil)
-	s.mu.Lock()
-	s.investigations[investigation.ID] = investigation
-	s.mu.Unlock()
+	// Persist to Neo4j via graph-store; cache remains even if downstream is degraded.
+	_ = s.store.Put(r.Context(), investigation)
+	s.audit(r, "CREATE_INVESTIGATION", "Investigation", investigation.ID, http.StatusCreated)
 	s.complete(r.Context(), runID, "create-investigation", investigation.ID, []lineageemitter.Output{{
 		Namespace: investigation.ID, Name: investigation.ID, Type: "DDU.INVESTIGATION",
 	}})
 	writeJSON(w, http.StatusCreated, investigation)
 }
 
-func (s *apiServer) listInvestigations(w http.ResponseWriter, _ *http.Request) {
-	s.mu.RLock()
-	investigations := make([]Investigation, 0, len(s.investigations))
-	for _, investigation := range s.investigations {
-		investigations = append(investigations, investigation)
-	}
-	s.mu.RUnlock()
-	sort.Slice(investigations, func(i, j int) bool {
-		return investigations[i].CreatedAt > investigations[j].CreatedAt
-	})
+func (s *apiServer) listInvestigations(w http.ResponseWriter, r *http.Request) {
+	investigations := s.store.List(r.Context())
 	writeJSON(w, http.StatusOK, InvestigationList{Investigations: investigations})
 }
 
@@ -372,10 +393,7 @@ func (s *apiServer) listRelationships(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) investigation(id string) (Investigation, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	investigation, ok := s.investigations[id]
-	return investigation, ok
+	return s.store.Get(context.Background(), id)
 }
 
 func observationEntity(observation Observation) Entity {

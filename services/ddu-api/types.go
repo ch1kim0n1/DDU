@@ -7,10 +7,25 @@ type InvestigationMember struct {
 }
 
 type Investigation struct {
-	ID        string                 `json:"id"`
-	Name      string                 `json:"name"`
-	CreatedAt string                 `json:"created_at"`
-	Members   []InvestigationMember  `json:"members,omitempty"`
+	ID              string                `json:"id"`
+	Name            string                `json:"name"`
+	CreatedAt       string                `json:"created_at"`
+	Members         []InvestigationMember `json:"members,omitempty"`
+	RetentionPolicy RetentionPolicy       `json:"retention_policy,omitempty"`
+}
+
+type RetentionPolicy struct {
+	RetentionDays  int    `json:"retention_days"`
+	ExpiresAt      string `json:"expires_at,omitempty"`
+	AutoDelete     bool   `json:"auto_delete"`
+	ExportRequired bool   `json:"export_required"`
+	Reason         string `json:"reason,omitempty"`
+}
+
+type ExportRequest struct {
+	Format     string `json:"format"`     // json, csv, pdf
+	IncludeRaw bool   `json:"include_raw"`
+	Scope      string `json:"scope"`      // full, summary, evidence_only
 }
 
 type InvestigationList struct {

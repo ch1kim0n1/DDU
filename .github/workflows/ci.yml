@@ -28,7 +28,6 @@ jobs:
       - name: buf breaking (against main)
         run: buf breaking --against "https://github.com/${{ github.repository }}.git#branch=main,subdir=libs/ddu-contracts"
         if: github.event_name == 'pull_request'
-        continue-on-error: true
       - name: buf generate
         run: buf generate
 
@@ -98,6 +97,7 @@ jobs:
           - services/ddu-temporal
           - services/ddu-agent
           - services/ddu-osint
+          - services/ddu-intel
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -117,10 +117,9 @@ jobs:
           pip install pytest httpx
           python -m pytest ${{ matrix.module }}/test_app.py -q
         if: startsWith(matrix.module, 'services/') && hashFiles('${{ matrix.module }}/test_app.py') != ''
-        continue-on-error: true
       - name: ruff
-        if: false  # enable once ruff config lands
-        run: pip install ruff && ruff check ${{ matrix.module }}
+        run: pip install ruff==0.9.10 && ruff check ${{ matrix.module }} --select E9,F63,F7,F82
+        if: startsWith(matrix.module, 'services/') || matrix.module == 'libs/ddu-py-common'
 
   # ─────────────────────────────────────────────
   # Docker compose: validate stack file syntax (no container startup yet)
@@ -131,7 +130,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: validate compose file
-        run: docker compose -f infra/docker-compose.yml config --quiet
+        run: |
+          docker compose -f infra/docker-compose.yml config --quiet
+          docker compose -f infra/docker-compose.yml -f infra/docker-compose.ddu.yml config --quiet
 
   # ─────────────────────────────────────────────
   # UI: typecheck + build the ddu-ui Vite app

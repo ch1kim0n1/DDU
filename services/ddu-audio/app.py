@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from ddu_common.app import build_scaffold_app
 from ddu_common.evidence_client import EvidenceClient
 from ddu_common.lineage import Event, Input, LineageEmitter, Output
+from ddu_common.runtime import model_mode_is_stub
 from ddu_common.version import ServiceVersion, from_env
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -93,7 +94,7 @@ evidence_client = EvidenceClient()
 lineage = LineageEmitter(VERSION)
 audio_adapter: AudioAdapter = (
     DevelopmentAudio()
-    if os.environ.get("MODEL_MODE", "").lower() == "stub"
+    if model_mode_is_stub()
     else WhisperAdapter()
 )
 

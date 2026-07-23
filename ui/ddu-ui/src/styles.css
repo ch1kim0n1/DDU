@@ -122,8 +122,64 @@ code,
   box-shadow: 0 0 0 4px rgba(185, 245, 106, 0.18);
 }
 
-main {
+main,
+.shell-main {
   min-height: calc(100vh - 166px);
+}
+
+.page-motion {
+  position: relative;
+}
+
+.case-file {
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.gsap-scan {
+  pointer-events: none;
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 28%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(185, 245, 106, 0.18),
+    transparent
+  );
+  mix-blend-mode: screen;
+}
+
+.tab-stage {
+  transform-style: preserve-3d;
+  perspective: 1200px;
+}
+
+.tab-panel,
+.dashboard-grid {
+  transform-origin: 50% 0%;
+}
+
+.upload-control.busy span {
+  background-image: linear-gradient(
+    110deg,
+    var(--green) 0%,
+    var(--green) 40%,
+    #efffb8 50%,
+    var(--green) 60%,
+    var(--green) 100%
+  );
+  background-size: 200% 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .case-file,
+  .brand-mark,
+  .system-state i,
+  .gsap-scan {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 .hero {
@@ -174,6 +230,7 @@ h1 {
   display: grid;
   gap: 14px;
   padding: 32px;
+  overflow: hidden;
   background: var(--ink);
   color: var(--paper);
   box-shadow: 14px 14px 0 var(--signal);

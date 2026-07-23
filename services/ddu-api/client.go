@@ -8,7 +8,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
+
+	dduhttpclient "github.com/ddu/ddu-httpclient"
 )
 
 type serviceURLs struct {
@@ -35,7 +38,7 @@ type serviceURLs struct {
 
 type downstreamClient struct {
 	urls   serviceURLs
-	client *http.Client
+	client *dduhttpclient.Client
 }
 
 func (c *downstreamClient) ingestImage(
@@ -544,6 +547,37 @@ func (c *downstreamClient) ensureCollection(
 	return c.doJSON(req, nil)
 }
 
+func (c *downstreamClient) appendAudit(entry map[string]any) {
+	// Always emit structured audit to process log.
+	raw, _ := json.Marshal(entry)
+	fmt.Printf("ddu-audit %s\n", string(raw))
+	if strings.ToLower(strings.TrimSpace(os.Getenv("DDU_AUDIT_ENABLED"))) != "true" {
+		return
+	}
+	if strings.TrimSpace(c.urls.Storage) == "" {
+		return
+	}
+	payload := map[string]any{
+		"bucket": "ddu-audit",
+		"key": fmt.Sprintf(
+			"audit/%v/%v.json",
+			entry["investigation_id"],
+			entry["request_id"],
+		),
+		"content_type": "application/json",
+		"body":         entry,
+	}
+	req, err := jsonRequest(context.Background(), http.MethodPost, strings.TrimRight(c.urls.Storage, "/")+"/v1/objects", payload)
+	if err != nil {
+		return
+	}
+	resp, err := c.client.Do(context.Background(), req)
+	if err != nil {
+		return
+	}
+	resp.Body.Close()
+}
+
 func (c *downstreamClient) health(ctx context.Context, baseURL string) error {
 	req, err := http.NewRequestWithContext(
 		ctx,
@@ -559,7 +593,7 @@ func (c *downstreamClient) health(ctx context.Context, baseURL string) error {
 }
 
 func (c *downstreamClient) doJSON(req *http.Request, target any) error {
-	resp, err := c.client.Do(req)
+	resp, err := c.client.Do(req.Context(), req)
 	if err != nil {
 		return err
 	}

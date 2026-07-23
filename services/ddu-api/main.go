@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	dduhttpclient "github.com/ddu/ddu-httpclient"
 	"github.com/ddu/ddu-lineage-emitter"
 )
 
@@ -68,11 +69,27 @@ func main() {
 	if err != nil {
 		log.Printf("lineage emitter not initialized: %v (events will be dropped)", err)
 	}
-	client := &http.Client{Timeout: 5 * time.Minute}
+
+	httpClient := dduhttpclient.NewClient(dduhttpclient.Config{
+		MaxRetries: 3,
+		RetryDelay: 100 * time.Millisecond,
+		CircuitBreaker: dduhttpclient.CircuitBreakerConfig{
+			Enabled:     true,
+			MaxRequests: 5,
+			Interval:    30 * time.Second,
+			Timeout:     60 * time.Second,
+		},
+		RateLimiter: dduhttpclient.RateLimiterConfig{
+			Enabled: true,
+			RPS:     100,
+			Burst:   10,
+		},
+		Timeout: 5 * time.Minute,
+	})
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", *port),
-		Handler:           newHandler(urls, client, lineage),
+		Handler:           newHandler(urls, httpClient, lineage),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       10 * time.Minute,
 		WriteTimeout:      10 * time.Minute,

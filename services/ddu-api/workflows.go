@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -471,9 +472,7 @@ func (s *apiServer) manageMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodGet {
-		s.mu.RLock()
 		members := append([]InvestigationMember{}, investigation.Members...)
-		s.mu.RUnlock()
 		writeJSON(w, http.StatusOK, map[string]any{"members": members})
 		return
 	}
@@ -487,8 +486,7 @@ func (s *apiServer) manageMembers(w http.ResponseWriter, r *http.Request) {
 		input.Role = RoleViewer
 	}
 	input.AddedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	s.mu.Lock()
-	current := s.investigations[investigationID]
+	current := investigation
 	replaced := false
 	for i, member := range current.Members {
 		if member.UserID == input.UserID {
@@ -500,8 +498,8 @@ func (s *apiServer) manageMembers(w http.ResponseWriter, r *http.Request) {
 	if !replaced {
 		current.Members = append(current.Members, input)
 	}
-	s.investigations[investigationID] = current
-	s.mu.Unlock()
+	_ = s.store.Put(r.Context(), current)
+	s.audit(r, "UPSERT_MEMBER", "InvestigationMember", input.UserID, http.StatusOK)
 	writeJSON(w, http.StatusOK, input)
 }
 
@@ -537,22 +535,211 @@ func (s *apiServer) createOntologyType(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, created)
 }
 
-func (s *apiServer) pluginCatalog(w http.ResponseWriter, r *http.Request) {
+func (s *apiServer) listPlugins(w http.ResponseWriter, r *http.Request) {
+	s.pluginMtx.RLock()
+	defer s.pluginMtx.RUnlock()
+
+	plugins := make([]Plugin, 0, len(s.plugins))
+	for _, plugin := range s.plugins {
+		plugins = append(plugins, plugin)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"plugins": []map[string]any{
-			{"id": "perception.image", "name": "Image perception", "phase": 1},
-			{"id": "discovery.sherlock", "name": "Username discovery", "phase": 1},
-			{"id": "osint.spiderfoot", "name": "OSINT enrichment", "phase": 1},
-			{"id": "collector.gallerydl", "name": "Media collector", "phase": 1},
-			{"id": "face.compreface", "name": "Face matching", "phase": 2},
-			{"id": "audio.whisper", "name": "Audio transcription", "phase": 2},
-			{"id": "temporal.graphiti", "name": "Temporal KG", "phase": 2},
-			{"id": "agent.langgraph", "name": "Autonomous agent", "phase": 3},
-		},
-		"sdk": map[string]string{
+		"plugins": plugins,
+		"sdk": map[string]any{
 			"contract": "Register a ddu-* service exposing /healthz, /versionz, and lineage events.",
 			"version":  "1.0.0",
+			"endpoints": map[string]string{
+				"register":   "POST /v1/plugins",
+				"deregister": "DELETE /v1/plugins/{id}",
+				"list":       "GET /v1/plugins",
+			},
 		},
+	})
+}
+
+func (s *apiServer) registerPlugin(w http.ResponseWriter, r *http.Request) {
+	var plugin Plugin
+	if err := json.NewDecoder(r.Body).Decode(&plugin); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid plugin registration request")
+		return
+	}
+
+	if plugin.ID == "" {
+		writeError(w, http.StatusBadRequest, "plugin id is required")
+		return
+	}
+	if plugin.Name == "" {
+		writeError(w, http.StatusBadRequest, "plugin name is required")
+		return
+	}
+	if plugin.Endpoint == "" {
+		writeError(w, http.StatusBadRequest, "plugin endpoint is required")
+		return
+	}
+
+	s.pluginMtx.Lock()
+	defer s.pluginMtx.Unlock()
+
+	if _, exists := s.plugins[plugin.ID]; exists {
+		writeError(w, http.StatusConflict, "plugin with this id already exists")
+		return
+	}
+
+	plugin.RegisteredAt = time.Now().UTC().Format(time.RFC3339)
+	if plugin.Metadata == nil {
+		plugin.Metadata = make(map[string]string)
+	}
+
+	s.plugins[plugin.ID] = plugin
+
+	writeJSON(w, http.StatusCreated, plugin)
+}
+
+func (s *apiServer) deregisterPlugin(w http.ResponseWriter, r *http.Request) {
+	pluginID := chi.URLParam(r, "id")
+	if pluginID == "" {
+		writeError(w, http.StatusBadRequest, "plugin id is required")
+		return
+	}
+
+	s.pluginMtx.Lock()
+	defer s.pluginMtx.Unlock()
+
+	if _, exists := s.plugins[pluginID]; !exists {
+		writeError(w, http.StatusNotFound, "plugin not found")
+		return
+	}
+
+	delete(s.plugins, pluginID)
+
+	writeJSON(w, http.StatusOK, map[string]string{"id": pluginID, "status": "deregistered"})
+}
+
+func (s *apiServer) getRetentionPolicy(w http.ResponseWriter, r *http.Request) {
+	investigationID := chi.URLParam(r, "id")
+	inv, ok := s.investigation(investigationID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "investigation not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"investigation_id": investigationID,
+		"retention_policy": inv.RetentionPolicy,
+	})
+}
+
+func (s *apiServer) setRetentionPolicy(w http.ResponseWriter, r *http.Request) {
+	investigationID := chi.URLParam(r, "id")
+	inv, ok := s.investigation(investigationID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "investigation not found")
+		return
+	}
+
+	var policy RetentionPolicy
+	if err := json.NewDecoder(r.Body).Decode(&policy); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid retention policy request")
+		return
+	}
+
+	if policy.RetentionDays < 0 {
+		writeError(w, http.StatusBadRequest, "retention_days must be non-negative")
+		return
+	}
+
+	inv.RetentionPolicy = policy
+	s.store.Put(r.Context(), inv)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"investigation_id": investigationID,
+		"retention_policy": policy,
+	})
+}
+
+func (s *apiServer) exportInvestigation(w http.ResponseWriter, r *http.Request) {
+	investigationID := chi.URLParam(r, "id")
+	inv, ok := s.investigation(investigationID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "investigation not found")
+		return
+	}
+
+	var req ExportRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid export request")
+		return
+	}
+
+	if req.Format == "" {
+		req.Format = "json"
+	}
+	if req.Scope == "" {
+		req.Scope = "summary"
+	}
+
+	exportData := map[string]any{
+		"investigation_id": investigationID,
+		"name":             inv.Name,
+		"created_at":       inv.CreatedAt,
+		"export_format":    req.Format,
+		"export_scope":     req.Scope,
+		"exported_at":      time.Now().UTC().Format(time.RFC3339),
+	}
+
+	if req.Scope == "full" || req.Scope == "evidence_only" {
+		evidence, err := s.downstream.listEvidence(r.Context(), investigationID)
+		if err == nil {
+			exportData["evidence"] = evidence
+		}
+	}
+
+	if req.Scope == "full" {
+		entities, err := s.downstream.listEntities(r.Context(), investigationID, "")
+		if err == nil {
+			exportData["entities"] = entities.Entities
+		}
+		relationships, err := s.downstream.listRelationships(r.Context(), investigationID)
+		if err == nil {
+			exportData["relationships"] = relationships.Relationships
+		}
+	}
+
+	switch req.Format {
+	case "json":
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=investigation_%s.json", investigationID))
+		json.NewEncoder(w).Encode(exportData)
+	case "csv":
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=investigation_%s.csv", investigationID))
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "CSV export not yet implemented"})
+	default:
+		writeError(w, http.StatusBadRequest, "unsupported export format")
+	}
+}
+
+func (s *apiServer) deleteInvestigation(w http.ResponseWriter, r *http.Request) {
+	investigationID := chi.URLParam(r, "id")
+	inv, ok := s.investigation(investigationID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "investigation not found")
+		return
+	}
+
+	if inv.RetentionPolicy.ExportRequired {
+		writeError(w, http.StatusForbidden, "investigation requires export before deletion per retention policy")
+		return
+	}
+
+	s.store.mu.Lock()
+	delete(s.store.cache, investigationID)
+	s.store.mu.Unlock()
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"investigation_id": investigationID,
+		"status":          "deleted",
 	})
 }
 

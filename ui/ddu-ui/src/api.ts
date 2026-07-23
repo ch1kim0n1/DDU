@@ -4,13 +4,33 @@ const API_URL = (import.meta.env.VITE_DDU_API_URL || "http://localhost:8001").re
 );
 
 const ROLE_KEY = "ddu.role";
+const TOKEN_KEY = "ddu.access_token";
 
 export function getRole() {
   return localStorage.getItem(ROLE_KEY) || "analyst";
 }
 
-export function setRole(role: string) {
+export function getAccessToken() {
+  return localStorage.getItem(TOKEN_KEY) || "";
+}
+
+export async function setRole(role: string) {
   localStorage.setItem(ROLE_KEY, role);
+  try {
+    const response = await fetch(`${API_URL}/v1/auth/dev-token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: "ui-user", role }),
+    });
+    if (response.ok) {
+      const body = (await response.json()) as { access_token?: string };
+      if (body.access_token) {
+        localStorage.setItem(TOKEN_KEY, body.access_token);
+      }
+    }
+  } catch {
+    // AUTH_MODE=dev still accepts X-DDU-Role when token mint is unavailable.
+  }
 }
 
 export interface Investigation {
@@ -81,6 +101,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers || {});
   if (!headers.has("X-DDU-Role")) {
     headers.set("X-DDU-Role", getRole());
+  }
+  const token = getAccessToken();
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
   }
   const response = await fetch(`${API_URL}${path}`, {...init, headers});
   if (!response.ok) {

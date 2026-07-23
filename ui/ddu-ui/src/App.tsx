@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -20,6 +21,14 @@ import {GraphView} from "./GraphView";
 import {MapView} from "./MapView";
 import {Scene3D} from "./Scene3D";
 import {TimelineView} from "./TimelineView";
+import {
+  useCaseMotion,
+  useCountUp,
+  useHomeMotion,
+  useIntelLogMotion,
+  useShellMotion,
+  useTabPanelMotion,
+} from "./useMotion";
 
 function navigate(path: string) {
   window.history.pushState({}, "", path);
@@ -50,8 +59,11 @@ function Link({
 }
 
 function Shell({children}: {children: ReactNode}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  useShellMotion(rootRef);
+
   return (
-    <div className="shell">
+    <div className="shell" ref={rootRef}>
       <header className="masthead">
         <Link className="brand" to="/">
           <span className="brand-mark" aria-hidden="true">
@@ -67,7 +79,7 @@ function Shell({children}: {children: ReactNode}) {
             Role
             <select
               defaultValue={getRole()}
-              onChange={(event) => setRole(event.target.value)}
+              onChange={(event) => { void setRole(event.target.value); }}
             >
               <option value="viewer">viewer</option>
               <option value="investigator">investigator</option>
@@ -79,7 +91,7 @@ function Shell({children}: {children: ReactNode}) {
           Local operations
         </div>
       </header>
-      <main>{children}</main>
+      <main className="shell-main">{children}</main>
       <footer>
         <span>Observations remain observations.</span>
         <span>Evidence-backed · provenance-preserved</span>
@@ -93,6 +105,8 @@ function HomePage() {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
+  const pageRef = useRef<HTMLDivElement>(null);
+  useHomeMotion(pageRef, investigations.length);
 
   useEffect(() => {
     api.listInvestigations().then(setInvestigations).catch((reason: Error) => {
@@ -117,62 +131,64 @@ function HomePage() {
 
   return (
     <Shell>
-      <section className="hero">
-        <div>
-          <p className="eyebrow">Investigation registry</p>
-          <h1>Open a case.<br />Follow the evidence.</h1>
-          <p className="lede">
-            Upload source imagery and review machine observations without
-            collapsing detection into fact.
-          </p>
-        </div>
-        <form className="create-card" onSubmit={create}>
-          <span className="card-index">NEW / 01</span>
-          <label htmlFor="investigation-name">Investigation name</label>
-          <input
-            id="investigation-name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Operation name or case reference"
-            autoComplete="off"
-          />
-          <button disabled={creating || !name.trim()} type="submit">
-            {creating ? "Opening case…" : "Create investigation"}
-          </button>
-          {error && <p className="error">{error}</p>}
-        </form>
-      </section>
+      <div className="page-motion" ref={pageRef}>
+        <section className="hero">
+          <div>
+            <p className="eyebrow">Investigation registry</p>
+            <h1>Open a case. Follow the evidence.</h1>
+            <p className="lede">
+              Upload source imagery and review machine observations without
+              collapsing detection into fact.
+            </p>
+          </div>
+          <form className="create-card" onSubmit={create}>
+            <span className="card-index">NEW / 01</span>
+            <label htmlFor="investigation-name">Investigation name</label>
+            <input
+              id="investigation-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Operation name or case reference"
+              autoComplete="off"
+            />
+            <button disabled={creating || !name.trim()} type="submit">
+              {creating ? "Opening case…" : "Create investigation"}
+            </button>
+            {error && <p className="error">{error}</p>}
+          </form>
+        </section>
 
-      <section className="registry">
-        <div className="section-heading">
-          <h2>Active investigations</h2>
-          <span>{investigations.length.toString().padStart(2, "0")} files</span>
-        </div>
-        {investigations.length === 0 && !error ? (
-          <div className="empty-state">
-            <span>∅</span>
-            No investigations registered in this session.
+        <section className="registry">
+          <div className="section-heading">
+            <h2>Active investigations</h2>
+            <span>{investigations.length.toString().padStart(2, "0")} files</span>
           </div>
-        ) : (
-          <div className="case-grid">
-            {investigations.map((investigation, index) => (
-              <Link
-                className="case-file"
-                key={investigation.id}
-                to={`/investigations/${investigation.id}`}
-              >
-                <span className="case-number">
-                  CASE {(index + 1).toString().padStart(3, "0")}
-                </span>
-                <h3>{investigation.name}</h3>
-                <code>{investigation.id}</code>
-                <time>{formatDate(investigation.created_at)}</time>
-                <b>Open file →</b>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
+          {investigations.length === 0 && !error ? (
+            <div className="empty-state">
+              <span>∅</span>
+              No investigations registered in this session.
+            </div>
+          ) : (
+            <div className="case-grid">
+              {investigations.map((investigation, index) => (
+                <Link
+                  className="case-file"
+                  key={investigation.id}
+                  to={`/investigations/${investigation.id}`}
+                >
+                  <span className="case-number">
+                    CASE {(index + 1).toString().padStart(3, "0")}
+                  </span>
+                  <h3>{investigation.name}</h3>
+                  <code>{investigation.id}</code>
+                  <time>{formatDate(investigation.created_at)}</time>
+                  <b>Open file →</b>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
     </Shell>
   );
 }
@@ -195,6 +211,12 @@ function InvestigationPage({id}: {id: string}) {
   const [intelLog, setIntelLog] = useState<string>("");
   const [scene, setScene] = useState<{nodes: Array<{id: string; label?: string; type?: string; x: number; y: number; z: number; confidence?: number}>; edges: Array<{id: string; source: string; target: string; confidence?: number}>}>({nodes: [], edges: []});
   const [playback, setPlayback] = useState<Array<{frame: number; narrative?: string}>>([]);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const intelLogRef = useRef<HTMLPreElement>(null);
+  useCaseMotion(pageRef, Boolean(investigation));
+  useTabPanelMotion(panelRef, tab);
+  useIntelLogMotion(intelLogRef, intelLog);
 
   const load = useCallback(async () => {
     try {
@@ -254,6 +276,7 @@ function InvestigationPage({id}: {id: string}) {
 
   return (
     <Shell>
+      <div className="page-motion case-motion" ref={pageRef}>
       <div className="case-header">
         <div>
           <Link className="back-link" to="/">← Registry</Link>
@@ -456,6 +479,7 @@ function InvestigationPage({id}: {id: string}) {
         </button>
       </div>
 
+      <div className="tab-stage" ref={panelRef}>
       {tab === "graph" && (
         <section className="tab-panel graph-panel">
           {entities.length === 0 ? (
@@ -528,7 +552,9 @@ function InvestigationPage({id}: {id: string}) {
               Web history / deleted content
             </button>
           </div>
-          <pre className="intel-log">{intelLog || "Run a post-MVP intel capability to inspect hypotheses."}</pre>
+          <pre className="intel-log" ref={intelLogRef}>
+            {intelLog || "Run a post-MVP intel capability to inspect hypotheses."}
+          </pre>
         </section>
       )}
 
@@ -639,6 +665,8 @@ function InvestigationPage({id}: {id: string}) {
           </section>
         </div>
       )}
+      </div>
+      </div>
     </Shell>
   );
 }
@@ -722,10 +750,14 @@ function Metric({
   value: number;
   accent?: boolean;
 }) {
+  const valueRef = useRef<HTMLElement | null>(null);
+  useCountUp(valueRef, value);
   return (
     <div className={accent ? "metric accent" : "metric"}>
       <span>{label}</span>
-      <strong>{value.toString().padStart(2, "0")}</strong>
+      <strong ref={(node) => { valueRef.current = node; }}>
+        {value.toString().padStart(2, "0")}
+      </strong>
     </div>
   );
 }

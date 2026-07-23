@@ -82,7 +82,7 @@ DDU owns the intelligence lifecycle. The open-source projects own their capabili
 
 ## Status
 
-**Concept / Pre-Alpha.** Product Development Document and engineering roadmap are in this repository. No runnable code yet.
+**Pre-Alpha / runnable local stack.** Product Development Document and engineering roadmap are in this repository. Use `make tier1` then `./infra/scripts/dev-services.sh` (or `make up` for containerized DDU services).
 
 ## Documents
 

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	lineageemitter "github.com/ddu/ddu-lineage-emitter"
@@ -40,11 +41,22 @@ type graphSnapshot struct {
 	Relationships   []Relationship `json:"relationships"`
 }
 
+type EvidenceDependency struct {
+	ID              string            `json:"id"`
+	ParentEvidenceID string            `json:"parent_evidence_id"`
+	ChildEvidenceID  string            `json:"child_evidence_id"`
+	InvestigationID  string            `json:"investigation_id"`
+	DependencyType  string            `json:"dependency_type"` // DERIVED, CONTAINS, REFERENCES
+	CreatedAt       string            `json:"created_at"`
+}
+
 type server struct {
 	repository graphRepository
 	lineage    lineageEmitter
 	now        func() time.Time
 	snapshots  map[string]graphSnapshot
+	dependencies map[string][]EvidenceDependency
+	depMtx     sync.RWMutex
 }
 
 func newHandler(repository graphRepository, lineage lineageEmitter) http.Handler {
@@ -53,6 +65,8 @@ func newHandler(repository graphRepository, lineage lineageEmitter) http.Handler
 		lineage:    lineage,
 		now:        time.Now,
 		snapshots:  map[string]graphSnapshot{},
+		dependencies: make(map[string][]EvidenceDependency),
+		depMtx:     sync.RWMutex{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.healthz)
@@ -66,6 +80,10 @@ func newHandler(repository graphRepository, lineage lineageEmitter) http.Handler
 	mux.HandleFunc("POST /v1/snapshots", s.createSnapshot)
 	mux.HandleFunc("GET /v1/snapshots", s.listSnapshots)
 	mux.HandleFunc("POST /v1/query", s.query)
+	mux.HandleFunc("POST /v1/evidence-dependencies", s.createEvidenceDependency)
+	mux.HandleFunc("GET /v1/evidence-dependencies/{investigation_id}", s.listEvidenceDependencies)
+	mux.HandleFunc("GET /v1/evidence-dependencies/{investigation_id}/{evidence_id}/downstream", s.getDownstreamDependencies)
+	mux.HandleFunc("DELETE /v1/evidence-dependencies/{evidence_id}", s.invalidateEvidence)
 	mux.HandleFunc("GET /", rootHandler)
 	return mux
 }
@@ -270,6 +288,7 @@ func (s *server) createSnapshot(w http.ResponseWriter, r *http.Request) {
 		Relationships:     relationships,
 	}
 	s.snapshots[snapshot.ID] = snapshot
+	_ = s.persistSnapshot(r.Context(), snapshot)
 	s.complete(r.Context(), runID, "create-snapshot", input.InvestigationID, snapshot.ID, "DDU.SNAPSHOT")
 	writeJSON(w, http.StatusCreated, snapshot)
 }
@@ -280,6 +299,7 @@ func (s *server) listSnapshots(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "investigation_id is required")
 		return
 	}
+	_ = s.loadSnapshots(r.Context(), investigationID)
 	snapshots := make([]graphSnapshot, 0)
 	for _, snapshot := range s.snapshots {
 		if snapshot.InvestigationID == investigationID {
@@ -287,6 +307,53 @@ func (s *server) listSnapshots(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"snapshots": snapshots})
+}
+
+func (s *server) persistSnapshot(ctx context.Context, snapshot graphSnapshot) error {
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		return err
+	}
+	_, err = s.repository.Query(ctx, `
+		MERGE (s:GraphSnapshot {id: $id})
+		SET s.investigation_id = $investigation_id,
+		    s.label = $label,
+		    s.created_at = $created_at,
+		    s.entity_count = $entity_count,
+		    s.relationship_count = $relationship_count,
+		    s.payload = $payload
+	`, map[string]any{
+		"id":                 snapshot.ID,
+		"investigation_id":   snapshot.InvestigationID,
+		"label":              snapshot.Label,
+		"created_at":         snapshot.CreatedAt,
+		"entity_count":       snapshot.EntityCount,
+		"relationship_count": snapshot.RelationshipCount,
+		"payload":            string(payload),
+	})
+	return err
+}
+
+func (s *server) loadSnapshots(ctx context.Context, investigationID string) error {
+	records, err := s.repository.Query(ctx, `
+		MATCH (s:GraphSnapshot {investigation_id: $investigation_id})
+		RETURN s.id AS id, s.payload AS payload
+	`, map[string]any{"investigation_id": investigationID})
+	if err != nil {
+		return err
+	}
+	for _, record := range records {
+		raw, _ := record["payload"].(string)
+		if raw == "" {
+			continue
+		}
+		var snapshot graphSnapshot
+		if json.Unmarshal([]byte(raw), &snapshot) != nil {
+			continue
+		}
+		s.snapshots[snapshot.ID] = snapshot
+	}
+	return nil
 }
 
 func (s *server) query(w http.ResponseWriter, r *http.Request) {
@@ -377,10 +444,121 @@ func (s *server) fail(ctx context.Context, runID, job, investigationID string) {
 	})
 }
 
+func decodeJSON(body io.Reader, target any) error {
+	data, err := io.ReadAll(io.LimitReader(body, 2<<20))
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, target)
+}
+
 func (s *server) emit(ctx context.Context, event lineageemitter.Event) {
 	if s.lineage != nil {
 		_ = s.lineage.Emit(ctx, event)
 	}
+}
+
+func (s *server) createEvidenceDependency(w http.ResponseWriter, r *http.Request) {
+	var dependency struct {
+		ParentEvidenceID string `json:"parent_evidence_id"`
+		ChildEvidenceID  string `json:"child_evidence_id"`
+		InvestigationID  string `json:"investigation_id"`
+		DependencyType  string `json:"dependency_type"`
+	}
+	if err := decodeJSON(r.Body, &dependency); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid dependency request")
+		return
+	}
+	
+	if dependency.ParentEvidenceID == "" || dependency.ChildEvidenceID == "" || dependency.InvestigationID == "" {
+		writeError(w, http.StatusBadRequest, "parent_evidence_id, child_evidence_id, and investigation_id are required")
+		return
+	}
+	
+	if dependency.DependencyType == "" {
+		dependency.DependencyType = "DERIVED"
+	}
+	
+	s.depMtx.Lock()
+	if s.dependencies[dependency.InvestigationID] == nil {
+		s.dependencies[dependency.InvestigationID] = []EvidenceDependency{}
+	}
+	
+	newDep := EvidenceDependency{
+		ID:              uuid.NewString(),
+		ParentEvidenceID: dependency.ParentEvidenceID,
+		ChildEvidenceID:  dependency.ChildEvidenceID,
+		InvestigationID:  dependency.InvestigationID,
+		DependencyType:  dependency.DependencyType,
+		CreatedAt:       s.now().UTC().Format(time.RFC3339),
+	}
+	s.dependencies[dependency.InvestigationID] = append(s.dependencies[dependency.InvestigationID], newDep)
+	s.depMtx.Unlock()
+	
+	writeJSON(w, http.StatusCreated, newDep)
+}
+
+func (s *server) listEvidenceDependencies(w http.ResponseWriter, r *http.Request) {
+	investigationID := r.PathValue("investigation_id")
+	s.depMtx.RLock()
+	deps := s.dependencies[investigationID]
+	s.depMtx.RUnlock()
+	
+	writeJSON(w, http.StatusOK, map[string]any{
+		"investigation_id": investigationID,
+		"dependencies": deps,
+		"total_dependencies": len(deps),
+	})
+}
+
+func (s *server) getDownstreamDependencies(w http.ResponseWriter, r *http.Request) {
+	investigationID := r.PathValue("investigation_id")
+	evidenceID := r.PathValue("evidence_id")
+	
+	s.depMtx.RLock()
+	deps := s.dependencies[investigationID]
+	s.depMtx.Unlock()
+	
+	downstream := []EvidenceDependency{}
+	for _, dep := range deps {
+		if dep.ParentEvidenceID == evidenceID {
+			downstream = append(downstream, dep)
+			// Recursively get downstream of this child
+			// This is simplified; in production would use proper graph traversal
+		}
+	}
+	
+	writeJSON(w, http.StatusOK, map[string]any{
+		"investigation_id": investigationID,
+		"evidence_id": evidenceID,
+		"downstream_dependencies": downstream,
+		"total_downstream": len(downstream),
+	})
+}
+
+func (s *server) invalidateEvidence(w http.ResponseWriter, r *http.Request) {
+	evidenceID := r.PathValue("id")
+	
+	s.depMtx.Lock()
+	defer s.depMtx.Unlock()
+	
+	affectedInvestigations := []string{}
+	for invID, deps := range s.dependencies {
+		for i, dep := range deps {
+			if dep.ParentEvidenceID == evidenceID || dep.ChildEvidenceID == evidenceID {
+				// Mark as invalidated
+				deps[i].DependencyType = "INVALIDATED"
+				affectedInvestigations = append(affectedInvestigations, invID)
+			}
+		}
+	}
+	
+	writeJSON(w, http.StatusOK, map[string]any{
+		"evidence_id": evidenceID,
+		"invalidated": true,
+		"affected_investigations": affectedInvestigations,
+		"affected_investigation_count": len(affectedInvestigations),
+	})
 }
 
 func investigationFacet(investigationID string) map[string]string {

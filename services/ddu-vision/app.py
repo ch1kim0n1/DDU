@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from ddu_common.app import build_scaffold_app
 from ddu_common.evidence_client import EvidenceClient
 from ddu_common.lineage import Event, Input, LineageEmitter, Output
+from ddu_common.runtime import model_mode_is_stub, select_device
 from ddu_common.version import ServiceVersion, from_env
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -195,7 +196,7 @@ evidence_client = EvidenceClient()
 lineage = LineageEmitter(VERSION)
 detector: Detector = (
     DevelopmentDetector()
-    if os.environ.get("MODEL_MODE", "").lower() == "stub"
+    if model_mode_is_stub()
     else GroundedSAM2Detector()
 )
 
@@ -317,7 +318,7 @@ async def detect_specialized(request: SpecializedDetectRequest) -> list[dict]:
         provenance = item.get("provenance") or {}
         provenance["extraction_method"] = (
             "development-stub"
-            if os.environ.get("MODEL_MODE", "").lower() == "stub"
+            if model_mode_is_stub()
             else "mmdetection"
         )
         item["provenance"] = provenance
@@ -326,7 +327,8 @@ async def detect_specialized(request: SpecializedDetectRequest) -> list[dict]:
 
 def main() -> None:
     port = int(os.environ.get("PORT", 8101))
-    log.info("ddu-vision listening on :%d", port)
+    device = select_device()
+    log.info("ddu-vision listening on :%d device=%s stub=%s", port, device.get("device"), model_mode_is_stub())
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
 
 
