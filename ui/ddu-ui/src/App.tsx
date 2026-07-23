@@ -188,6 +188,8 @@ function InvestigationPage({id}: {id: string}) {
   const [busy, setBusy] = useState("");
   const [username, setUsername] = useState("");
   const [sourceURL, setSourceURL] = useState("");
+  const [typeName, setTypeName] = useState("");
+  const [customTypes, setCustomTypes] = useState<string[]>([]);
   const [tab, setTab] = useState<"graph" | "map" | "timeline" | "list">("graph");
 
   const load = useCallback(async () => {
@@ -208,6 +210,7 @@ function InvestigationPage({id}: {id: string}) {
         api.listEvidence(id),
         api.listRelationships(id),
         api.timeline(id),
+        api.listOntologyTypes(id),
       ]);
       setInvestigation(caseData);
       setEntities(entityData);
@@ -216,6 +219,11 @@ function InvestigationPage({id}: {id: string}) {
       setEvidence(evidenceData);
       setRelationships(relationshipData);
       setTimeline(timelineData);
+      setCustomTypes(
+        (ontologyData.entity_types || [])
+          .filter((item) => item.custom)
+          .map((item) => item.name),
+      );
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load case");
@@ -340,6 +348,37 @@ function InvestigationPage({id}: {id: string}) {
             NL agent plan
           </button>
         </div>
+        <form
+          className="intake-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!typeName.trim()) return;
+            void runAction("ontology", () =>
+              api.createOntologyType(id, {
+                name: typeName.trim(),
+                description: "Custom investigation type",
+                parent_type: "ENTITY_TYPE_OBJECT",
+              }),
+            );
+            setTypeName("");
+          }}
+        >
+          <label>
+            Custom ontology type
+            <input
+              disabled={Boolean(busy)}
+              onChange={(event) => setTypeName(event.target.value)}
+              placeholder="drone"
+              value={typeName}
+            />
+          </label>
+          <button disabled={Boolean(busy) || !typeName.trim()} type="submit">
+            {busy === "ontology" ? "Registering…" : "Add entity type"}
+          </button>
+          {customTypes.length > 0 && (
+            <small>{customTypes.join(", ")}</small>
+          )}
+        </form>
       </section>
 
       {error && <div className="error-banner">{error}</div>}

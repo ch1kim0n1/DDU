@@ -36,7 +36,7 @@ spiderfoot_client = httpx.AsyncClient(base_url=SPIDERFOOT_URL, timeout=60.0)
 class EnrichRequest(BaseModel):
     target: str = Field(min_length=1)
     investigation_id: str = Field(min_length=1)
-    modules: list[str] = Field(default_factory=list)
+    modules: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -151,7 +151,7 @@ async def enrich(request: EnrichRequest) -> list[dict]:
         facets=facets,
     ))
     try:
-        results = await enricher.enrich(request.target, request.modules)
+        results = await enricher.enrich(request.target, request.modules or [])
     except (httpx.HTTPError, RuntimeError, ValueError, OSError) as exc:
         lineage.emit(Event(
             event_type="FAIL",
@@ -164,7 +164,8 @@ async def enrich(request: EnrichRequest) -> list[dict]:
 
     observed_at = datetime.now(timezone.utc).isoformat()
     method = "development-stub" if isinstance(enricher, DevelopmentEnricher) else "spiderfoot"
-    parameters = {"target": request.target, "modules": ",".join(request.modules) if request.modules else "all"}
+    modules = request.modules or []
+    parameters = {"target": request.target, "modules": ",".join(modules) if modules else "all"}
     observations = [
         {
             "id": str(uuid4()),

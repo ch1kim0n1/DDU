@@ -241,6 +241,9 @@ func (c *downstreamClient) discoverUsername(
 	investigationID, username string,
 	sites []string,
 ) ([]Observation, error) {
+	if sites == nil {
+		sites = []string{}
+	}
 	payload := map[string]any{
 		"investigation_id": investigationID,
 		"username":         username,
@@ -264,6 +267,9 @@ func (c *downstreamClient) enrichOSINT(
 	investigationID, target string,
 	modules []string,
 ) ([]Observation, error) {
+	if modules == nil {
+		modules = []string{}
+	}
 	payload := map[string]any{
 		"investigation_id": investigationID,
 		"target":           target,
@@ -326,6 +332,9 @@ func (c *downstreamClient) resolveEntities(
 	entityIDs []string,
 	threshold float64,
 ) ([]CandidateRelationship, error) {
+	if entityIDs == nil {
+		entityIDs = []string{}
+	}
 	payload := map[string]any{
 		"investigation_id": investigationID,
 		"entity_ids":       entityIDs,
@@ -443,6 +452,45 @@ func (c *downstreamClient) upsertVectors(
 		return err
 	}
 	return c.doJSON(req, nil)
+}
+
+func (c *downstreamClient) listOntologyTypes(
+	ctx context.Context,
+	investigationID string,
+) (map[string]any, error) {
+	query := url.Values{}
+	if investigationID != "" {
+		query.Set("investigation_id", investigationID)
+	}
+	target := strings.TrimRight(c.urls.Ontology, "/") + "/v1/entity-types"
+	if encoded := query.Encode(); encoded != "" {
+		target += "?" + encoded
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, err
+	}
+	var body map[string]any
+	err = c.doJSON(req, &body)
+	return body, err
+}
+
+func (c *downstreamClient) createOntologyType(
+	ctx context.Context,
+	payload map[string]any,
+) (map[string]any, error) {
+	req, err := jsonRequest(
+		ctx,
+		http.MethodPost,
+		strings.TrimRight(c.urls.Ontology, "/")+"/v1/entity-types",
+		payload,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var body map[string]any
+	err = c.doJSON(req, &body)
+	return body, err
 }
 
 func (c *downstreamClient) ensureCollection(

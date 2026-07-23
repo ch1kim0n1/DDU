@@ -173,6 +173,25 @@ export const api = {
       body: JSON.stringify({mode, ...body}),
     }),
 
+  listOntologyTypes: (investigationId?: string) => {
+    const query = investigationId
+      ? `?investigation_id=${encodeURIComponent(investigationId)}`
+      : "";
+    return request<{entity_types: Array<{name: string; number: number; custom?: boolean}>; custom_types?: unknown[]}>(
+      `/v1/ontology/types${query}`,
+    );
+  },
+
+  createOntologyType: (
+    id: string,
+    body: {name: string; description?: string; parent_type?: string},
+  ) =>
+    request(`/v1/investigations/${encodeURIComponent(id)}/ontology/types`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body),
+    }),
+
   listEntities: async (id: string) =>
     (
       await request<{entities: Entity[]}>(

@@ -505,6 +505,38 @@ func (s *apiServer) manageMembers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, input)
 }
 
+func (s *apiServer) listOntologyTypes(w http.ResponseWriter, r *http.Request) {
+	body, err := s.downstream.listOntologyTypes(r.Context(), r.URL.Query().Get("investigation_id"))
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "ontology service unavailable: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, body)
+}
+
+func (s *apiServer) createOntologyType(w http.ResponseWriter, r *http.Request) {
+	investigationID := chi.URLParam(r, "id")
+	if _, ok := s.investigation(investigationID); !ok {
+		writeError(w, http.StatusNotFound, "investigation not found")
+		return
+	}
+	var input map[string]any
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, "valid JSON body is required")
+		return
+	}
+	input["investigation_id"] = investigationID
+	runID := s.start(r.Context(), "ontology-create-type", investigationID, nil)
+	created, err := s.downstream.createOntologyType(r.Context(), input)
+	if err != nil {
+		s.fail(r.Context(), runID, "ontology-create-type", investigationID)
+		writeError(w, http.StatusBadGateway, "ontology type creation failed: "+err.Error())
+		return
+	}
+	s.complete(r.Context(), runID, "ontology-create-type", investigationID, nil)
+	writeJSON(w, http.StatusCreated, created)
+}
+
 func (s *apiServer) pluginCatalog(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"plugins": []map[string]any{

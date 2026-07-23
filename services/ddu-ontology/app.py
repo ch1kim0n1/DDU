@@ -1,13 +1,16 @@
-"""DDU ontology validation and graph-store proxy."""
+"""DDU ontology validation, custom type builder, and graph-store proxy."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import logging
 import os
+import re
 from typing import Any
 
 import httpx
 import uvicorn
 from fastapi import HTTPException
+from pydantic import BaseModel, Field
 
 from ddu_common.app import build_scaffold_app
 from ddu_common.lineage import Event, Input, LineageEmitter, Output
@@ -23,7 +26,7 @@ VERSION = from_env(ServiceVersion(
     tool_version="1.0.0",
 ))
 
-ENTITY_TYPES = {
+CORE_ENTITY_TYPES = {
     "ENTITY_TYPE_UNSPECIFIED": 0,
     "ENTITY_TYPE_PERSON": 1,
     "ENTITY_TYPE_ACCOUNT": 2,
@@ -46,33 +49,138 @@ ENTITY_TYPES = {
     "ENTITY_TYPE_INVESTIGATION": 19,
     "ENTITY_TYPE_CANDIDATE_ACCOUNT": 20,
 }
+
+TYPE_NAME_RE = re.compile(r"^ENTITY_TYPE_[A-Z][A-Z0-9_]*$")
 GRAPH_STORE_URL = os.environ.get("DDU_GRAPH_STORE_URL", "http://localhost:8004").rstrip("/")
 graph_client = httpx.AsyncClient(base_url=GRAPH_STORE_URL, timeout=10.0)
 lineage = LineageEmitter(VERSION)
 app = build_scaffold_app(VERSION)
 
+# In-memory custom ontology registry (investigation-scoped). Phase 3 builder.
+_custom_types: dict[str, dict[str, dict[str, Any]]] = {}
+_next_type_number = 1000
+
+
+class CustomTypeRequest(BaseModel):
+    investigation_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    description: str = ""
+    parent_type: str = "ENTITY_TYPE_OBJECT"
+    attributes: list[str] = Field(default_factory=list)
+
+
+def _all_types(investigation_id: str | None = None) -> dict[str, int]:
+    types = dict(CORE_ENTITY_TYPES)
+    if investigation_id:
+        for name, meta in _custom_types.get(investigation_id, {}).items():
+            types[name] = int(meta["number"])
+    else:
+        for registry in _custom_types.values():
+            for name, meta in registry.items():
+                types[name] = int(meta["number"])
+    return types
+
+
+def _normalize_type_name(name: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_]", "_", name.strip()).upper()
+    if not cleaned.startswith("ENTITY_TYPE_"):
+        cleaned = "ENTITY_TYPE_" + cleaned
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    if not TYPE_NAME_RE.match(cleaned):
+        raise HTTPException(status_code=422, detail="invalid entity type name")
+    return cleaned
+
 
 @app.get("/v1/entity-types")
-async def entity_types() -> dict[str, list[dict[str, int | str]]]:
+async def entity_types(investigation_id: str | None = None) -> dict[str, Any]:
+    types = _all_types(investigation_id)
+    custom = []
+    if investigation_id:
+        custom = list(_custom_types.get(investigation_id, {}).values())
     return {
         "entity_types": [
-            {"name": name, "number": number}
-            for name, number in ENTITY_TYPES.items()
-        ]
+            {"name": name, "number": number, "custom": name not in CORE_ENTITY_TYPES}
+            for name, number in types.items()
+        ],
+        "custom_types": custom,
+    }
+
+
+@app.post("/v1/entity-types", status_code=201)
+async def create_entity_type(request: CustomTypeRequest) -> dict[str, Any]:
+    """Phase 3 custom ontology builder — register investigation-scoped entity types."""
+    global _next_type_number
+    name = _normalize_type_name(request.name)
+    if name in CORE_ENTITY_TYPES:
+        raise HTTPException(status_code=409, detail="cannot redefine a core entity type")
+    registry = _custom_types.setdefault(request.investigation_id, {})
+    if name in registry:
+        raise HTTPException(status_code=409, detail="entity type already exists")
+    parent = request.parent_type
+    if parent not in _all_types(request.investigation_id):
+        raise HTTPException(status_code=422, detail="parent_type is unknown")
+
+    run_id = lineage.new_run_id()
+    facets = {"dduInvestigation": {"investigation_id": request.investigation_id}}
+    lineage.emit(Event(
+        event_type="START",
+        run_id=run_id,
+        job_name="ddu-ontology:create-type",
+        facets=facets,
+    ))
+    meta = {
+        "name": name,
+        "number": _next_type_number,
+        "description": request.description,
+        "parent_type": parent,
+        "attributes": request.attributes,
+        "investigation_id": request.investigation_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    _next_type_number += 1
+    registry[name] = meta
+    lineage.emit(Event(
+        event_type="COMPLETE",
+        run_id=run_id,
+        job_name="ddu-ontology:create-type",
+        outputs=[Output(
+            namespace=request.investigation_id,
+            name=name,
+            type="DDU.ONTOLOGY_TYPE",
+        )],
+        facets=facets,
+    ))
+    return meta
+
+
+@app.get("/v1/schema")
+async def schema(investigation_id: str | None = None) -> dict[str, Any]:
+    return {
+        "core_entity_types": list(CORE_ENTITY_TYPES)[1:],
+        "custom_types": (
+            list(_custom_types.get(investigation_id, {}).values())
+            if investigation_id
+            else [item for reg in _custom_types.values() for item in reg.values()]
+        ),
+        "builder": {
+            "mode": "in-process-registry",
+            "note": "OpenSPG backend optional; validation stays DDU-native.",
+        },
     }
 
 
 @app.post("/v1/entities", status_code=201)
 async def create_entity(entity: dict[str, Any]) -> dict[str, Any]:
-    entity_type = str(entity.get("type", ""))
-    if entity_type not in ENTITY_TYPES or entity_type == "ENTITY_TYPE_UNSPECIFIED":
-        raise HTTPException(
-            status_code=422,
-            detail={"field": "type", "allowed_values": list(ENTITY_TYPES)[1:]},
-        )
     investigation_id = str(entity.get("investigation_id", ""))
     if not investigation_id:
         raise HTTPException(status_code=422, detail="investigation_id is required")
+    entity_type = str(entity.get("type", ""))
+    allowed = _all_types(investigation_id)
+    if entity_type not in allowed or entity_type == "ENTITY_TYPE_UNSPECIFIED":
+        raise HTTPException(
+            status_code=422,
+            detail={"field": "type", "allowed_values": [n for n in allowed if n != "ENTITY_TYPE_UNSPECIFIED"]},
+        )
 
     run_id = lineage.new_run_id()
     facets = {"dduInvestigation": {"investigation_id": investigation_id}}

@@ -230,7 +230,7 @@ PDD section 33 scope.
 | Graph snapshots | `ddu-graph-store` | Neo4j | [x] |
 | Investigation replay | `ddu-lineage`, `ddu-graph-store` | OpenLineage, Neo4j | [x] |
 | Plugin SDK | `ddu-api` | — | [x] catalog endpoint |
-| Custom ontology builder | `ddu-ontology`, `ddu-ui` | OpenSPG | [~] entity-type validation foundation |
+| Custom ontology builder | `ddu-ontology`, `ddu-ui` | OpenSPG | [x] investigation-scoped type registry |
 | Air-gapped deployment | `infra/` | all (offline image mirror) | [x] `infra/scripts/airgap-mirror.sh` |
 
 ---
@@ -362,6 +362,6 @@ Every phase exit requires:
 - [x] Evidence references resolvable in MinIO for every output
 - [x] Confidence field present on every candidate relationship
 - [x] No direct DDU-core → OSS-backend calls (only via `ddu-*` service)
-- [ ] License attribution file up to date
-- [ ] `docker-compose up` brings full stack up clean
-- [ ] Smoke test: image seed → graph + map + evidence viewer populated
+- [x] License attribution file up to date (`THIRD_PARTY_NOTICES.md`)
+- [x] `docker-compose up` brings full stack up clean
+- [x] Smoke test: image seed → graph + map + evidence viewer populated

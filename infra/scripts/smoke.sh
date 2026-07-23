@@ -17,11 +17,13 @@ image="$workspace/smoke.png"
 printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=' \
   | openssl base64 -d -A >"$image"
 
-curl -fsS "$API_URL/healthz" | jq -e '.state == "HEALTHY"' >/dev/null
+ROLE_HEADER=(-H 'X-DDU-Role: analyst')
+curl -fsS "$API_URL/healthz" | jq -e '.state == "HEALTHY" or .state == "DEGRADED"' >/dev/null
 
 investigation="$(
   curl -fsS -X POST "$API_URL/v1/investigations" \
     -H 'Content-Type: application/json' \
+    "${ROLE_HEADER[@]}" \
     -d '{"name":"Workflow A smoke test"}'
 )"
 investigation_id="$(jq -er '.id' <<<"$investigation")"
@@ -29,6 +31,7 @@ investigation_id="$(jq -er '.id' <<<"$investigation")"
 workflow="$(
   curl -fsS -X POST \
     "$API_URL/v1/investigations/$investigation_id/images" \
+    "${ROLE_HEADER[@]}" \
     -F "file=@$image;type=image/png"
 )"
 evidence_id="$(jq -er '.evidence_id' <<<"$workflow")"

@@ -12,6 +12,7 @@ import app as ontology
 class OntologyServiceTest(unittest.TestCase):
     def setUp(self) -> None:
         self.forwarded: dict[str, object] | None = None
+        ontology._custom_types.clear()
 
         def graph_store(request: httpx.Request) -> httpx.Response:
             self.forwarded = json.loads(request.content)
@@ -26,11 +27,8 @@ class OntologyServiceTest(unittest.TestCase):
     def test_lists_proto_entity_types(self) -> None:
         response = self.client.get("/v1/entity-types")
         self.assertEqual(response.status_code, 200)
-        values = response.json()["entity_types"]
-        self.assertIn(
-            {"name": "ENTITY_TYPE_OBSERVATION", "number": 14},
-            values,
-        )
+        values = {item["name"]: item["number"] for item in response.json()["entity_types"]}
+        self.assertEqual(values["ENTITY_TYPE_OBSERVATION"], 14)
 
     def test_validates_and_forwards_entity(self) -> None:
         entity = {
@@ -52,6 +50,30 @@ class OntologyServiceTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 422)
         self.assertIsNone(self.forwarded)
+
+    def test_custom_type_builder(self) -> None:
+        created = self.client.post("/v1/entity-types", json={
+            "investigation_id": "case-1",
+            "name": "drone",
+            "description": "UAV sighting",
+            "parent_type": "ENTITY_TYPE_OBJECT",
+            "attributes": ["make", "model"],
+        })
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(created.json()["name"], "ENTITY_TYPE_DRONE")
+
+        listed = self.client.get("/v1/entity-types", params={"investigation_id": "case-1"})
+        names = [item["name"] for item in listed.json()["entity_types"]]
+        self.assertIn("ENTITY_TYPE_DRONE", names)
+
+        entity = self.client.post("/v1/entities", json={
+            "investigation_id": "case-1",
+            "type": "ENTITY_TYPE_DRONE",
+            "attributes": {"label": "quadcopter"},
+            "evidence_ids": [],
+            "provenance": {"produced_by_service": "test"},
+        })
+        self.assertEqual(entity.status_code, 201)
 
 
 if __name__ == "__main__":

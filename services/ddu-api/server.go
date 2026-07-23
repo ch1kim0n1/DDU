@@ -69,6 +69,8 @@ func newHandler(urls serviceURLs, client *http.Client, lineage lineageEmitter) h
 	router.Get("/v1/investigations/{id}/evidence/{evidenceID}", s.getEvidence)
 	router.Get("/v1/investigations/{id}/relationships", s.listRelationships)
 	router.Get("/v1/plugins", s.pluginCatalog)
+	router.Get("/v1/ontology/types", s.listOntologyTypes)
+	router.Post("/v1/investigations/{id}/ontology/types", s.createOntologyType)
 	return router
 }
 
