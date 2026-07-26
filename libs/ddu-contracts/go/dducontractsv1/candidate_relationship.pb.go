@@ -698,7 +698,7 @@ var File_ddu_candidate_relationship_proto protoreflect.FileDescriptor
 
 const file_ddu_candidate_relationship_proto_rawDesc = "" +
 	"\n" +
-	" ddu/candidate_relationship.proto\x12\x10ddu.contracts.v1\x1a\x14ddu/provenance.proto\x1a\x12ddu/evidence.proto\"\xf6\x05\n" +
+	" ddu/candidate_relationship.proto\x12\x10ddu.contracts.v1\x1a\x14ddu/provenance.proto\"\xf6\x05\n" +
 	"\x15CandidateRelationship\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12)\n" +
 	"\x10investigation_id\x18\x02 \x01(\tR\x0finvestigationId\x12(\n" +
@@ -766,7 +766,8 @@ const file_ddu_candidate_relationship_proto_rawDesc = "" +
 	"\tnew_state\x18\x02 \x01(\x0e2#.ddu.contracts.v1.VerificationStateR\bnewState\x12\x1f\n" +
 	"\vresolved_by\x18\x03 \x01(\tR\n" +
 	"resolvedBy\x12'\n" +
-	"\x0fresolution_note\x18\x04 \x01(\tR\x0eresolutionNoteB0Z.github.com/ddu/ddu-contracts/go/dducontractsv1b\x06proto3"
+	"\x0fresolution_note\x18\x04 \x01(\tR\x0eresolutionNoteBG\n" +
+	"\x13io.ddu.contracts.v1P\x01Z.github.com/ddu/ddu-contracts/go/dducontractsv1b\x06proto3"
 
 var (
 	file_ddu_candidate_relationship_proto_rawDescOnce sync.Once
@@ -822,7 +823,6 @@ func file_ddu_candidate_relationship_proto_init() {
 		return
 	}
 	file_ddu_provenance_proto_init()
-	file_ddu_evidence_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

@@ -522,7 +522,7 @@ var File_ddu_lineage_proto protoreflect.FileDescriptor
 
 const file_ddu_lineage_proto_rawDesc = "" +
 	"\n" +
-	"\x11ddu/lineage.proto\x12\x10ddu.contracts.v1\x1a\x11ddu/service.proto\x1a\x12ddu/evidence.proto\"\xa3\x04\n" +
+	"\x11ddu/lineage.proto\x12\x10ddu.contracts.v1\x1a\x11ddu/service.proto\"\xa3\x04\n" +
 	"\fLineageEvent\x12G\n" +
 	"\n" +
 	"event_type\x18\x01 \x01(\x0e2(.ddu.contracts.v1.LineageEvent.EventTypeR\teventType\x12\x1d\n" +
@@ -575,7 +575,8 @@ const file_ddu_lineage_proto_rawDesc = "" +
 	"\x05event\x18\x01 \x01(\v2\x1e.ddu.contracts.v1.LineageEventR\x05event\"M\n" +
 	"\x18EmitLineageEventResponse\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x12\x15\n" +
-	"\x06run_id\x18\x02 \x01(\tR\x05runIdB0Z.github.com/ddu/ddu-contracts/go/dducontractsv1b\x06proto3"
+	"\x06run_id\x18\x02 \x01(\tR\x05runIdBG\n" +
+	"\x13io.ddu.contracts.v1P\x01Z.github.com/ddu/ddu-contracts/go/dducontractsv1b\x06proto3"
 
 var (
 	file_ddu_lineage_proto_rawDescOnce sync.Once
@@ -631,7 +632,6 @@ func file_ddu_lineage_proto_init() {
 		return
 	}
 	file_ddu_service_proto_init()
-	file_ddu_evidence_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

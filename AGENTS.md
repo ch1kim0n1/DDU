@@ -32,7 +32,7 @@ DDU/
 
 ## Languages
 
-- **Go 1.22** — `ddu-api`, `ddu-ingest`, `ddu-storage`, `ddu-graph-store`, `ddu-vector`, `ddu-lineage`, `ddu-webcapture`, `ddu-collector`, `ddu-discovery`
+- **Go 1.23** — `ddu-api`, `ddu-ingest`, `ddu-storage`, `ddu-graph-store`, `ddu-vector`, `ddu-lineage`, `ddu-webcapture`, `ddu-collector`, `ddu-discovery`
 - **Python 3.11+** — `ddu-vision`, `ddu-face`, `ddu-ocr`, `ddu-audio`, `ddu-geo`, `ddu-resolution`, `ddu-ontology`, `ddu-temporal`, `ddu-agent`, `ddu-osint`
 - **TypeScript / React** — `ddu-ui`
 - **Protobuf** — `libs/ddu-contracts/proto/` — single source of truth for service interfaces

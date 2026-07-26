@@ -6,6 +6,9 @@ __pycache__/
 node_modules/
 dist/
 
+# Local development server logs
+ui/ddu-ui/vite*.log
+
 # Reference clones of upstream OSS repos — not part of DDU source.
 # 6.6GB; kept locally for reading only.
 open-source/

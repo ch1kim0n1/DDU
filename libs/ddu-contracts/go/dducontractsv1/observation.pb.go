@@ -700,7 +700,7 @@ var File_ddu_observation_proto protoreflect.FileDescriptor
 
 const file_ddu_observation_proto_rawDesc = "" +
 	"\n" +
-	"\x15ddu/observation.proto\x12\x10ddu.contracts.v1\x1a\x14ddu/provenance.proto\x1a\x12ddu/evidence.proto\"\xec\x04\n" +
+	"\x15ddu/observation.proto\x12\x10ddu.contracts.v1\x1a\x14ddu/provenance.proto\"\xec\x04\n" +
 	"\vObservation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12)\n" +
 	"\x10investigation_id\x18\x02 \x01(\tR\x0finvestigationId\x12\x1f\n" +
@@ -766,7 +766,8 @@ const file_ddu_observation_proto_rawDesc = "" +
 	"\x19OBSERVATION_TYPE_LOCATION\x10\x05\x12\x1d\n" +
 	"\x19OBSERVATION_TYPE_USERNAME\x10\x06\x12\x1d\n" +
 	"\x19OBSERVATION_TYPE_METADATA\x10\a\x12#\n" +
-	"\x1fOBSERVATION_TYPE_ENTITY_MENTION\x10\bB0Z.github.com/ddu/ddu-contracts/go/dducontractsv1b\x06proto3"
+	"\x1fOBSERVATION_TYPE_ENTITY_MENTION\x10\bBG\n" +
+	"\x13io.ddu.contracts.v1P\x01Z.github.com/ddu/ddu-contracts/go/dducontractsv1b\x06proto3"
 
 var (
 	file_ddu_observation_proto_rawDescOnce sync.Once
@@ -820,7 +821,6 @@ func file_ddu_observation_proto_init() {
 		return
 	}
 	file_ddu_provenance_proto_init()
-	file_ddu_evidence_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

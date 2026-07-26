@@ -8,6 +8,6 @@ RUN pip install --no-cache-dir /opt/ddu-py-common
 COPY services/ddu-resolution /app
 RUN pip install --no-cache-dir /app
 
-ENV PORT=8106
-EXPOSE 8106
-CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8106"]
+ENV PORT=8111
+EXPOSE 8111
+CMD ["python", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8111"]

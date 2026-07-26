@@ -3,9 +3,10 @@ syntax = "proto3";
 package ddu.contracts.v1;
 
 import "ddu/service.proto";
-import "ddu/evidence.proto";
 
 option go_package = "github.com/ddu/ddu-contracts/go/dducontractsv1";
+option java_package = "io.ddu.contracts.v1";
+option java_multiple_files = true;
 
 // OpenLineage event wrapper emitted by every DDU service on every invocation.
 // Maps directly to the OpenLineage RunEvent schema. Services emit START, RUNNING,

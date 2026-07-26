@@ -516,7 +516,7 @@ var File_ddu_evidence_proto protoreflect.FileDescriptor
 
 const file_ddu_evidence_proto_rawDesc = "" +
 	"\n" +
-	"\x12ddu/evidence.proto\x12\x10ddu.contracts.v1\x1a\x14ddu/provenance.proto\"\xe9\x04\n" +
+	"\x12ddu/evidence.proto\x12\x10ddu.contracts.v1\"\xe9\x04\n" +
 	"\bEvidence\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12)\n" +
 	"\x10investigation_id\x18\x02 \x01(\tR\x0finvestigationId\x122\n" +
@@ -572,7 +572,8 @@ const file_ddu_evidence_proto_rawDesc = "" +
 	"\x19EVIDENCE_TYPE_OBJECT_CROP\x10\n" +
 	"\x12\x17\n" +
 	"\x13EVIDENCE_TYPE_FRAME\x10\v\x12\x1c\n" +
-	"\x18EVIDENCE_TYPE_TRANSCRIPT\x10\fB0Z.github.com/ddu/ddu-contracts/go/dducontractsv1b\x06proto3"
+	"\x18EVIDENCE_TYPE_TRANSCRIPT\x10\fBG\n" +
+	"\x13io.ddu.contracts.v1P\x01Z.github.com/ddu/ddu-contracts/go/dducontractsv1b\x06proto3"
 
 var (
 	file_ddu_evidence_proto_rawDescOnce sync.Once
@@ -617,7 +618,6 @@ func file_ddu_evidence_proto_init() {
 	if File_ddu_evidence_proto != nil {
 		return
 	}
-	file_ddu_provenance_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

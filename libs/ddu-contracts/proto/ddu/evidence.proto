@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package ddu.contracts.v1;
 
-import "ddu/provenance.proto";
-
 option go_package = "github.com/ddu/ddu-contracts/go/dducontractsv1";
+option java_package = "io.ddu.contracts.v1";
+option java_multiple_files = true;
 
 // Evidence is an immutable object stored in MinIO (or alternative S3-compatible store).
 // Every derived artifact references one or more Evidence objects by id (content hash).

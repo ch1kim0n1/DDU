@@ -24,7 +24,8 @@ x-py-env: &py-env
 services:
   ddu-lineage:
     build:
-      context: ../services/ddu-lineage
+      context: ..
+      dockerfile: services/ddu-lineage/Dockerfile
     container_name: ddu-lineage
     networks: [ddu-net]
     ports: ["8006:8006"]
@@ -38,7 +39,8 @@ services:
 
   ddu-storage:
     build:
-      context: ../services/ddu-storage
+      context: ..
+      dockerfile: services/ddu-storage/Dockerfile
     container_name: ddu-storage
     networks: [ddu-net]
     ports: ["8003:8003"]
@@ -57,14 +59,15 @@ services:
 
   ddu-graph-store:
     build:
-      context: ../services/ddu-graph-store
+      context: ..
+      dockerfile: services/ddu-graph-store/Dockerfile
     container_name: ddu-graph-store
     networks: [ddu-net]
     ports: ["8004:8004"]
     environment:
       <<: *go-env
       PORT: 8004
-      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_URL: bolt://neo4j:7687
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-ddudevpass}
     depends_on:
@@ -76,7 +79,8 @@ services:
 
   ddu-vector:
     build:
-      context: ../services/ddu-vector
+      context: ..
+      dockerfile: services/ddu-vector/Dockerfile
     container_name: ddu-vector
     networks: [ddu-net]
     ports: ["8005:8005"]
@@ -93,7 +97,8 @@ services:
 
   ddu-ingest:
     build:
-      context: ../services/ddu-ingest
+      context: ..
+      dockerfile: services/ddu-ingest/Dockerfile
     container_name: ddu-ingest
     networks: [ddu-net]
     ports: ["8002:8002"]
@@ -106,7 +111,8 @@ services:
 
   ddu-webcapture:
     build:
-      context: ../services/ddu-webcapture
+      context: ..
+      dockerfile: services/ddu-webcapture/Dockerfile
     container_name: ddu-webcapture
     networks: [ddu-net]
     ports: ["8007:8007"]
@@ -119,7 +125,8 @@ services:
 
   ddu-collector:
     build:
-      context: ../services/ddu-collector
+      context: ..
+      dockerfile: services/ddu-collector/Dockerfile
     container_name: ddu-collector
     networks: [ddu-net]
     ports: ["8008:8008"]
@@ -132,7 +139,8 @@ services:
 
   ddu-discovery:
     build:
-      context: ../services/ddu-discovery
+      context: ..
+      dockerfile: services/ddu-discovery/Dockerfile
     container_name: ddu-discovery
     networks: [ddu-net]
     ports: ["8009:8009"]
@@ -284,7 +292,8 @@ services:
 
   ddu-api:
     build:
-      context: ../services/ddu-api
+      context: ..
+      dockerfile: services/ddu-api/Dockerfile
     container_name: ddu-api
     networks: [ddu-net]
     ports: ["8001:8001"]

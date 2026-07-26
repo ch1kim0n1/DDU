@@ -1,6 +1,6 @@
 module github.com/ddu/ddu-api
 
-go 1.22
+go 1.23
 
 require (
 	github.com/ddu/ddu-contracts v0.0.0
@@ -16,7 +16,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/sony/gobreaker v0.5.0 // indirect
 	golang.org/x/time v0.8.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 replace github.com/ddu/ddu-contracts => ../../libs/ddu-contracts

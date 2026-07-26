@@ -433,7 +433,8 @@ const file_ddu_provenance_proto_rawDesc = "" +
 	"\x1fVERIFICATION_STATE_CORROBORATED\x10\x02\x12\x1f\n" +
 	"\x1bVERIFICATION_STATE_VERIFIED\x10\x03\x12#\n" +
 	"\x1fVERIFICATION_STATE_CONTRADICTED\x10\x04\x12\x1f\n" +
-	"\x1bVERIFICATION_STATE_REJECTED\x10\x05B0Z.github.com/ddu/ddu-contracts/go/dducontractsv1b\x06proto3"
+	"\x1bVERIFICATION_STATE_REJECTED\x10\x05BG\n" +
+	"\x13io.ddu.contracts.v1P\x01Z.github.com/ddu/ddu-contracts/go/dducontractsv1b\x06proto3"
 
 var (
 	file_ddu_provenance_proto_rawDescOnce sync.Once

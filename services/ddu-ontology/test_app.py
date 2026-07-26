@@ -13,8 +13,11 @@ class OntologyServiceTest(unittest.TestCase):
     def setUp(self) -> None:
         self.forwarded: dict[str, object] | None = None
         ontology._custom_types.clear()
+        ontology._loaded_investigations.clear()
 
         def graph_store(request: httpx.Request) -> httpx.Response:
+            if request.method == "GET":
+                return httpx.Response(200, json={"entities": []})
             self.forwarded = json.loads(request.content)
             return httpx.Response(201, json={**self.forwarded, "id": "entity-1"})
 

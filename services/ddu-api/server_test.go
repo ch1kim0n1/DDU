@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+
+	dduhttpclient "github.com/ddu/ddu-httpclient"
 )
 
 func TestInvestigationImageWorkflow(t *testing.T) {
@@ -54,7 +56,7 @@ func TestInvestigationImageWorkflow(t *testing.T) {
 		Geo: backend.URL, GraphStore: backend.URL, Lineage: backend.URL,
 		Storage: backend.URL,
 	}
-	handler := newHandler(config, backend.Client(), nil)
+	handler := newHandler(config, dduhttpclient.NewClient(dduhttpclient.Config{HTTPClient: backend.Client()}), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/investigations", bytes.NewBufferString(`{"name":"Case One"}`))
 	req.Header.Set("X-DDU-Role", RoleAnalyst)
@@ -113,7 +115,7 @@ func TestRBACViewerGETAllowed(t *testing.T) {
 		Geo: backend.URL, GraphStore: backend.URL, Lineage: backend.URL,
 		Storage: backend.URL,
 	}
-	handler := newHandler(config, backend.Client(), nil)
+	handler := newHandler(config, dduhttpclient.NewClient(dduhttpclient.Config{HTTPClient: backend.Client()}), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/investigations", nil)
 	rec := httptest.NewRecorder()
@@ -134,7 +136,7 @@ func TestRBACViewerPOSTForbidden(t *testing.T) {
 		Geo: backend.URL, GraphStore: backend.URL, Lineage: backend.URL,
 		Storage: backend.URL,
 	}
-	handler := newHandler(config, backend.Client(), nil)
+	handler := newHandler(config, dduhttpclient.NewClient(dduhttpclient.Config{HTTPClient: backend.Client()}), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/investigations", bytes.NewBufferString(`{"name":"Case One"}`))
 	rec := httptest.NewRecorder()
@@ -170,7 +172,7 @@ func TestRBACInvestigatorPOSTAllowed(t *testing.T) {
 		Geo: backend.URL, GraphStore: backend.URL, Lineage: backend.URL,
 		Storage: backend.URL,
 	}
-	handler := newHandler(config, backend.Client(), nil)
+	handler := newHandler(config, dduhttpclient.NewClient(dduhttpclient.Config{HTTPClient: backend.Client()}), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/investigations", bytes.NewBufferString(`{"name":"Case One"}`))
 	req.Header.Set("X-DDU-Role", RoleInvestigator)
@@ -196,7 +198,7 @@ func TestIntelHighRiskRequiresAuthorizationPurpose(t *testing.T) {
 		Geo: backend.URL, GraphStore: backend.URL, Lineage: backend.URL,
 		Storage: backend.URL, Intel: backend.URL,
 	}
-	handler := newHandler(config, backend.Client(), nil)
+	handler := newHandler(config, dduhttpclient.NewClient(dduhttpclient.Config{HTTPClient: backend.Client()}), nil)
 	createReq := httptest.NewRequest(http.MethodPost, "/v1/investigations", bytes.NewBufferString(`{"name":"Intel"}`))
 	createReq.Header.Set("X-DDU-Role", RoleAnalyst)
 	createRec := httptest.NewRecorder()
@@ -250,7 +252,7 @@ func TestUsernameWorkflow(t *testing.T) {
 		Geo: backend.URL, GraphStore: backend.URL, Lineage: backend.URL,
 		Storage: backend.URL, Discovery: backend.URL, OSINT: backend.URL,
 	}
-	handler := newHandler(config, backend.Client(), nil)
+	handler := newHandler(config, dduhttpclient.NewClient(dduhttpclient.Config{HTTPClient: backend.Client()}), nil)
 	createReq := httptest.NewRequest(http.MethodPost, "/v1/investigations", bytes.NewBufferString(`{"name":"User Case"}`))
 	createReq.Header.Set("X-DDU-Role", RoleAnalyst)
 	createRec := httptest.NewRecorder()
@@ -297,7 +299,7 @@ func TestRelationshipsEndpoint(t *testing.T) {
 		Geo: backend.URL, GraphStore: backend.URL, Lineage: backend.URL,
 		Storage: backend.URL,
 	}
-	handler := newHandler(config, backend.Client(), nil)
+	handler := newHandler(config, dduhttpclient.NewClient(dduhttpclient.Config{HTTPClient: backend.Client()}), nil)
 
 	createReq := httptest.NewRequest(http.MethodPost, "/v1/investigations", bytes.NewBufferString(`{"name":"Case One"}`))
 	createReq.Header.Set("X-DDU-Role", RoleAdmin)

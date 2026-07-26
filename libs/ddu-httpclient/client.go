@@ -11,20 +11,23 @@ import (
 )
 
 type Config struct {
-	MaxRetries      int
-	RetryDelay      time.Duration
-	CircuitBreaker  CircuitBreakerConfig
-	RateLimiter     RateLimiterConfig
-	Timeout         time.Duration
+	// HTTPClient allows callers to provide a custom transport. It is useful for
+	// tests and for deployments that require a configured proxy or mTLS client.
+	HTTPClient     *http.Client
+	MaxRetries     int
+	RetryDelay     time.Duration
+	CircuitBreaker CircuitBreakerConfig
+	RateLimiter    RateLimiterConfig
+	Timeout        time.Duration
 }
 
 type CircuitBreakerConfig struct {
-	Enabled           bool
-	MaxRequests       uint32
-	Interval          time.Duration
-	Timeout           time.Duration
-	ReadyToTrip       func(counts gobreaker.Counts) bool
-	OnStateChange     func(name string, from gobreaker.State, to gobreaker.State)
+	Enabled       bool
+	MaxRequests   uint32
+	Interval      time.Duration
+	Timeout       time.Duration
+	ReadyToTrip   func(counts gobreaker.Counts) bool
+	OnStateChange func(name string, from gobreaker.State, to gobreaker.State)
 }
 
 type RateLimiterConfig struct {
@@ -52,12 +55,15 @@ func NewClient(config Config) *Client {
 		config.Timeout = 30 * time.Second
 	}
 
+	httpClient := config.HTTPClient
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: config.Timeout}
+	}
+
 	client := &Client{
-		httpClient: &http.Client{
-			Timeout: config.Timeout,
-		},
-		breakers: make(map[string]*gobreaker.CircuitBreaker),
-		config:   config,
+		httpClient: httpClient,
+		breakers:   make(map[string]*gobreaker.CircuitBreaker),
+		config:     config,
 	}
 
 	if config.RateLimiter.Enabled {

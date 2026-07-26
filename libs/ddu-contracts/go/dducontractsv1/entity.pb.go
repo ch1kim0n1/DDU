@@ -893,7 +893,7 @@ var File_ddu_entity_proto protoreflect.FileDescriptor
 
 const file_ddu_entity_proto_rawDesc = "" +
 	"\n" +
-	"\x10ddu/entity.proto\x12\x10ddu.contracts.v1\x1a\x14ddu/provenance.proto\x1a\x12ddu/evidence.proto\x1a\x15ddu/observation.proto\x1a ddu/candidate_relationship.proto\"\x9d\x03\n" +
+	"\x10ddu/entity.proto\x12\x10ddu.contracts.v1\x1a\x14ddu/provenance.proto\"\x9d\x03\n" +
 	"\x06Entity\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12)\n" +
 	"\x10investigation_id\x18\x02 \x01(\tR\x0finvestigationId\x120\n" +
@@ -988,7 +988,8 @@ const file_ddu_entity_proto_rawDesc = "" +
 	"\x11ENTITY_TYPE_CLAIM\x10\x11\x12\x1a\n" +
 	"\x16ENTITY_TYPE_HYPOTHESIS\x10\x12\x12\x1d\n" +
 	"\x19ENTITY_TYPE_INVESTIGATION\x10\x13\x12!\n" +
-	"\x1dENTITY_TYPE_CANDIDATE_ACCOUNT\x10\x14B0Z.github.com/ddu/ddu-contracts/go/dducontractsv1b\x06proto3"
+	"\x1dENTITY_TYPE_CANDIDATE_ACCOUNT\x10\x14BG\n" +
+	"\x13io.ddu.contracts.v1P\x01Z.github.com/ddu/ddu-contracts/go/dducontractsv1b\x06proto3"
 
 var (
 	file_ddu_entity_proto_rawDescOnce sync.Once
@@ -1051,9 +1052,6 @@ func file_ddu_entity_proto_init() {
 		return
 	}
 	file_ddu_provenance_proto_init()
-	file_ddu_evidence_proto_init()
-	file_ddu_observation_proto_init()
-	file_ddu_candidate_relationship_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
