@@ -96,6 +96,31 @@ def test_empty_verified_set_refuses_everything():
         assert_self(empty, "anything@example.com")
 
 
+# ── Persona matrix handoff (Engineer A → B) ──────────────────────────────
+
+
+def test_engineer_a_persona_matrix_loads_without_dropping_keys(tmp_path):
+    """The A→B handoff must not silently drop weights.
+
+    A's matrix uses shorthand type keys ("object") where the contract uses
+    canonical ones ("object_exposure"). Dropping them scored those findings
+    persona-neutral, which integration testing missed only because A's
+    intended value coincided with this module's default.
+    """
+    import json
+
+    from mirror_intel.personas import PERSONA_WEIGHTS, load_persona_weights
+
+    matrix = {"stalker": {"object": 1.75, "gps": 1.95, "breach": 0.71}}
+    path = tmp_path / "weights.json"
+    path.write_text(json.dumps(matrix))
+
+    load_persona_weights(str(path))
+    assert PERSONA_WEIGHTS["stalker"][FindingType.OBJECT_EXPOSURE] == 1.75
+    assert PERSONA_WEIGHTS["stalker"][FindingType.GPS_EXPOSURE] == 1.95
+    assert PERSONA_WEIGHTS["stalker"][FindingType.BREACH] == 0.71
+
+
 # ── Design rule 2: no third-party traversal ──────────────────────────────
 
 
