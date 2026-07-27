@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/graphview.tsx","./src/mapview.tsx","./src/scene3d.tsx","./src/timelineview.tsx","./src/api.ts","./src/main.tsx","./src/motion.ts","./src/usemotion.ts","./src/vite-env.d.ts"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/graphview.tsx","./src/mapview.tsx","./src/mirroronboarding.tsx","./src/scene3d.tsx","./src/timelineview.tsx","./src/api.ts","./src/main.tsx","./src/mirrorapi.ts","./src/motion.ts","./src/usemotion.ts","./src/vite-env.d.ts"],"version":"5.9.3"}
