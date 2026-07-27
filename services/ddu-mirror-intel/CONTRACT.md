@@ -159,6 +159,13 @@ POST /intel/scan/reject        → { proposal, findings_added: 0 }
 POST /intel/scan/cancel        → kill switch; drops everything pending
 ```
 
+Each proposal is also a LangGraph thread keyed by
+`mirror:{session_id}:{proposal_id}`. Planning pauses at a dynamic
+`interrupt`; approve/edit/reject resumes the stored checkpoint with
+`Command(resume=...)`. Production checkpoints and encrypted session state use
+Redis with the same TTL. SQLite is supported for durable single-worker
+deployments and the in-memory saver is reserved for tests.
+
 WebSocket event names Engineer A's stream should emit:
 `finding.new` · `finding.updated` · `finding.rejected` · `score.changed` ·
 `agent.awaiting_approval` · `session.wiped`

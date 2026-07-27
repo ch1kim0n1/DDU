@@ -111,11 +111,15 @@ export default function App() {
     const id = `sess_demo_${Date.now().toString(36)}`;
     try {
       await mirrorApi.health();
-      const created = await mirrorApi.createSession(id, "scammer", true);
+      const seedMocks =
+        import.meta.env.VITE_MIRROR_SEED_MOCKS === "true" ||
+        (import.meta.env.DEV && import.meta.env.VITE_MIRROR_SEED_MOCKS !== "false");
+      const created = await mirrorApi.createSession(id, "scammer", seedMocks);
       setSnapshot(created.snapshot);
-      connectSocket(id);
-      await mirrorApi.plan(id);
-      setSnapshot(await mirrorApi.snapshot(id));
+      const liveSessionId = created.session_id;
+      connectSocket(liveSessionId);
+      await mirrorApi.plan(liveSessionId);
+      setSnapshot(await mirrorApi.snapshot(liveSessionId));
     } catch (reason) {
       setError(
         reason instanceof Error

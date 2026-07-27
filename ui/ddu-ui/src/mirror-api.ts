@@ -9,11 +9,17 @@ const BASE_URL = (import.meta.env.VITE_MIRROR_API_URL || "http://localhost:8120"
   "",
 );
 
+function identityToken() {
+  return sessionStorage.getItem("ddu.identityToken") || "";
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = identityToken();
   const response = await fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? {Authorization: `Bearer ${token}`} : {}),
       ...(init?.headers || {}),
     },
   });
@@ -41,7 +47,7 @@ export const mirrorApi = {
     persona = "scammer",
     seedMockFindings = true,
   ) =>
-    request<{snapshot: SessionSnapshot}>("/intel/session", {
+    request<{session_id: string; snapshot: SessionSnapshot}>("/intel/session", {
       method: "POST",
       body: JSON.stringify({
         session_id: sessionId,

@@ -29,6 +29,14 @@ from .schema import Finding, SCORING_STATES
 from .session import Session
 
 ELEVENLABS_API = "https://api.elevenlabs.io/v1"
+ALLOWED_AUDIO_TYPES = {
+    "audio/webm",
+    "audio/ogg",
+    "audio/mpeg",
+    "audio/mp4",
+    "audio/wav",
+    "audio/x-wav",
+}
 
 
 class VoiceConfigurationError(RuntimeError):
@@ -172,13 +180,19 @@ async def transcribe(audio: bytes, mime_type: str) -> str:
             "ELEVENLABS_API_KEY is not configured; type a question or add the key "
             "to enable speech-to-text."
         )
+    normalized_mime = (mime_type or "audio/webm").split(";", 1)[0].strip().lower()
+    if normalized_mime not in ALLOWED_AUDIO_TYPES:
+        raise ValueError(f"unsupported audio type {normalized_mime!r}")
+    max_bytes = int(os.environ.get("MIRROR_VOICE_MAX_AUDIO_BYTES", "8388608"))
+    if not audio or len(audio) > max_bytes:
+        raise ValueError(f"audio must be between 1 and {max_bytes} bytes")
     model_id = os.environ.get("ELEVENLABS_STT_MODEL", "scribe_v2")
     async with httpx.AsyncClient(timeout=90.0) as client:
         response = await client.post(
             f"{ELEVENLABS_API}/speech-to-text",
             headers={"xi-api-key": api_key},
             data={"model_id": model_id},
-            files={"file": ("mirror-turn.webm", audio, mime_type or "audio/webm")},
+            files={"file": ("mirror-turn", audio, normalized_mime)},
         )
         response.raise_for_status()
         payload = response.json()

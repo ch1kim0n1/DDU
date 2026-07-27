@@ -24,6 +24,7 @@ networks:
     driver: bridge
 
 volumes:
+  mirror-redis-data:
   neo4j-data:
   neo4j-logs:
   qdrant-data:
@@ -34,6 +35,32 @@ volumes:
   marquez-db:
 
 services:
+  # Durable, TTL-bound DDU Mirror sessions, LangGraph checkpoints, and
+  # multi-worker WebSocket fan-out. Redis 8 includes the JSON/Search
+  # capabilities used by langgraph-checkpoint-redis.
+  mirror-redis:
+    image: redis:8.8.0-alpine
+    container_name: ddu-mirror-redis
+    networks: [ddu-net]
+    ports:
+      - "${MIRROR_REDIS_PORT:-6379}:6379"
+    environment:
+      MIRROR_REDIS_PASSWORD: ${MIRROR_REDIS_PASSWORD:-ddudevpass}
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - "${MIRROR_REDIS_PASSWORD:-ddudevpass}"
+    volumes:
+      - mirror-redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${MIRROR_REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
 
   # ─────────────────────────────────────────────
   # Graph persistence (OpenSPG + Graphiti backend)

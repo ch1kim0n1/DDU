@@ -20,30 +20,41 @@ anywhere in this file. Both absences are load-bearing.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
+import secrets
+from contextvars import ContextVar
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field, ValidationError
 
 from . import actionlog as A
 from . import orchestrator as orch
+from .events import event_bus
 from .guardrails import TargetRefusedError, VerifiedIdentity
+from .identity import IdentityVerificationError, verifier
 from .llm import get_llm
 from .mock import demo_identity, generate
 from .personas import PERSONAS, load_persona_weights
+from .providers import provider_status
 from .quarantine import classify_injection, parse_untrusted
 from .records import jurisdictions, personalize
 from .remediation import build_checklist
 from .schema import CONTRACT_VERSION, Finding, Origin
-from .session import store
+from .session import SessionConflictError, store
 from .voice import VoiceConfigurationError, answer_turn
+from .workflow import WorkflowDecisionError, runtime
 
 log = logging.getLogger("mirror-intel.api")
 
 router = APIRouter(prefix="/intel", tags=["mirror-intel"])
 
 load_persona_weights()
+_suppress_broadcast: ContextVar[bool] = ContextVar(
+    "mirror_suppress_broadcast", default=False
+)
 
 
 # ── request models ───────────────────────────────────────────────────────
@@ -52,7 +63,7 @@ load_persona_weights()
 
 
 class SessionCreate(BaseModel):
-    session_id: str
+    session_id: str | None = None
     emails: list[str] = Field(default_factory=list)
     handles: list[str] = Field(default_factory=list)
     account_urls: list[str] = Field(default_factory=list)
@@ -160,6 +171,40 @@ def _session(session_id: str):
     return session
 
 
+def _persist(session) -> None:
+    try:
+        store.persist(session)
+    except SessionConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+async def _broadcast(
+    session_id: str,
+    event: str,
+    *,
+    session=None,
+    payload: dict[str, Any] | None = None,
+    request_id: str = "",
+) -> None:
+    if _suppress_broadcast.get():
+        return
+    current = session or store.get(session_id)
+    snapshot = current.snapshot().model_dump(mode="json") if current else None
+    await event_bus.publish(
+        session_id,
+        event,
+        snapshot=snapshot,
+        payload=payload,
+        request_id=request_id,
+    )
+
+
+def _bearer(request: Request) -> str:
+    authorization = request.headers.get("authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    return token.strip() if scheme.lower() == "bearer" else ""
+
+
 # ── contract & metadata ──────────────────────────────────────────────────
 
 
@@ -180,6 +225,13 @@ async def contract() -> dict[str, Any]:
             "session.wiped",
         ],
         "llm_provider": get_llm().provider.name,
+        "workflow": runtime.status(),
+        "session_store": {
+            "backend": store.backend_name,
+            "ttl_seconds": store.ttl_seconds,
+        },
+        "identity": verifier.status(),
+        "event_bus": event_bus.backend_name,
     }
 
 
@@ -187,25 +239,42 @@ async def contract() -> dict[str, Any]:
 
 
 @router.post("/session")
-async def create_session(body: SessionCreate) -> dict[str, Any]:
+async def create_session(body: SessionCreate, request: Request) -> dict[str, Any]:
     """Register a session from an already-verified identity set.
 
     The caller is Engineer A's identity gate, after a code loop or OAuth. This
     endpoint trusts the set it is given and treats it as the ceiling — every
     downstream worker refuses anything outside it.
     """
-    if not (body.emails or body.handles or body.account_urls):
+    token = _bearer(request)
+    assertion = None
+    if token or verifier.required:
+        try:
+            assertion = verifier.verify(token)
+        except IdentityVerificationError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+    if assertion is not None:
+        session_id = f"sess_{secrets.token_urlsafe(18)}"
+        identity = assertion.build_identity(session_id)
+    else:
+        session_id = body.session_id or f"sess_dev_{secrets.token_urlsafe(12)}"
+        if not (body.emails or body.handles or body.account_urls):
+            raise HTTPException(
+                status_code=400,
+                detail="a session needs at least one verified identifier; complete verification first",
+            )
+        identity = VerifiedIdentity.build(
+            session_id=session_id,
+            emails=body.emails,
+            handles=body.handles,
+            account_urls=body.account_urls,
+        )
+    if verifier.required and body.seed_mock_findings:
         raise HTTPException(
             status_code=400,
-            detail="a session needs at least one verified identifier; complete verification first",
+            detail="mock findings cannot be seeded in production identity mode",
         )
-
-    identity = VerifiedIdentity.build(
-        session_id=body.session_id,
-        emails=body.emails,
-        handles=body.handles,
-        account_urls=body.account_urls,
-    )
     session = store.create(identity, persona=body.persona)
 
     if body.seed_mock_findings:
@@ -213,10 +282,12 @@ async def create_session(body: SessionCreate) -> dict[str, Any]:
         session.log.record(
             A.FINDING_ADDED,
             actor=Origin.SYSTEM,
-            subject=body.session_id,
+            subject=session.session_id,
             detail="Mock findings seeded for frontend development — NOT REAL DATA.",
             mock=True,
         )
+    _persist(session)
+    await _broadcast(session.session_id, "session.created", session=session)
 
     return {
         "session_id": session.session_id,
@@ -224,6 +295,11 @@ async def create_session(body: SessionCreate) -> dict[str, Any]:
         "verified_identifier_count": len(identity.all_identifiers),
         "findings": len(session.findings),
         "snapshot": session.snapshot().model_dump(mode="json"),
+        "identity_verification": (
+            "signed-assertion" if assertion is not None else "development"
+        ),
+        "session_backend": store.backend_name,
+        "expires_in_seconds": store.ttl_seconds,
     }
 
 
@@ -252,6 +328,12 @@ async def wipe_session(session_id: str) -> dict[str, Any]:
     )
     tail = [e.model_dump(mode="json") for e in session.log.tail(40)]
     summary = session.log.summary()
+    await _broadcast(
+        session_id,
+        "session.wiped",
+        session=session,
+        payload={"destroyed": counts, "action_log_summary": summary},
+    )
     store.drop(session_id)
     orch.drop_session(session_id)
     return {"destroyed": counts, "action_log": tail, "action_log_summary": summary}
@@ -273,12 +355,26 @@ async def plan(body: PlanRequest) -> dict[str, Any]:
             "bio_source": body.bio_source,
         }
     )
+    _persist(session)
+    checkpoints = {
+        proposal.id: runtime.arm(body.session_id, proposal.id) for proposal in proposals
+    }
+    await _broadcast(
+        body.session_id,
+        "agent.awaiting_approval",
+        payload={"proposal_ids": [proposal.id for proposal in proposals]},
+    )
     return {
         "session_id": body.session_id,
         "event": "agent.awaiting_approval",
         "proposals": [p.model_dump(mode="json") for p in proposals],
         "pending_total": len(orchestrator.pending()),
         "note": "No discovery has run. Each proposal needs approve, edit, or reject.",
+        "workflow": {
+            "runtime": "langgraph",
+            "checkpoint_backend": runtime.backend,
+            "checkpoints": checkpoints,
+        },
     }
 
 
@@ -320,14 +416,17 @@ def _run(session_id: str, proposal_id: str) -> dict[str, Any]:
 @router.post("/scan/approve")
 async def approve(body: DecisionRequest) -> dict[str, Any]:
     """Human approves; the work then runs."""
-    orchestrator = orch.for_session(_session(body.session_id))
     try:
-        orchestrator.approve(body.proposal_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return _run(body.session_id, body.proposal_id)
+        result = runtime.resume(
+            body.session_id,
+            body.proposal_id,
+            action="approve",
+            reason=body.reason,
+        )
+    except WorkflowDecisionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    await _broadcast(body.session_id, "finding.new", payload=result)
+    return result
 
 
 @router.post("/scan/edit")
@@ -337,42 +436,52 @@ async def edit_proposal(body: EditRequest) -> dict[str, Any]:
     Only inputs the step declares editable are applied; anything else is
     reported back in ``ignored`` rather than silently dropped.
     """
-    orchestrator = orch.for_session(_session(body.session_id))
     try:
-        proposal = orchestrator.edit_and_approve(body.proposal_id, body.changes, body.reason)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    result = _run(body.session_id, body.proposal_id)
-    result["applied_edit"] = proposal.human_edit
+        result = runtime.resume(
+            body.session_id,
+            body.proposal_id,
+            action="edit",
+            changes=body.changes,
+            reason=body.reason,
+        )
+    except WorkflowDecisionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    result["applied_edit"] = result["proposal"].get("human_edit")
+    await _broadcast(body.session_id, "finding.new", payload=result)
     return result
 
 
 @router.post("/scan/reject")
 async def reject_proposal(body: DecisionRequest) -> dict[str, Any]:
     """Human declines. Nothing runs, and the decision is logged."""
-    orchestrator = orch.for_session(_session(body.session_id))
     try:
-        proposal = orchestrator.reject(body.proposal_id, body.reason)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return {"proposal": proposal.model_dump(mode="json"), "findings_added": 0}
+        result = runtime.resume(
+            body.session_id,
+            body.proposal_id,
+            action="reject",
+            reason=body.reason,
+        )
+    except WorkflowDecisionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    await _broadcast(body.session_id, "finding.updated", payload=result)
+    return result
 
 
 @router.post("/scan/cancel")
 async def cancel(body: PlanRequest) -> dict[str, Any]:
     """Kill switch. Halts the agent and drops everything pending."""
-    orchestrator = orch.for_session(_session(body.session_id))
+    session = _session(body.session_id)
+    orchestrator = orch.for_session(session)
     dropped = orchestrator.cancel()
-    return {
+    _persist(session)
+    result = {
         "session_id": body.session_id,
         "cancelled": True,
         "dropped_actions": dropped,
         "note": "Findings already approved remain; nothing further will run.",
     }
+    await _broadcast(body.session_id, "finding.updated", session=session, payload=result)
+    return result
 
 
 @router.get("/scan/next-moves/{session_id}")
@@ -452,7 +561,8 @@ async def ingest_findings(body: FindingIngest) -> dict[str, Any]:
         )
 
     assert session.score is not None
-    return {
+    _persist(session)
+    response = {
         "session_id": body.session_id,
         "producer": body.producer,
         "accepted": [f.model_dump(mode="json") for f in added],
@@ -461,6 +571,8 @@ async def ingest_findings(body: FindingIngest) -> dict[str, Any]:
         "attack_paths": [p.model_dump(mode="json") for p in session.attack_paths],
         "attribution": [a.model_dump(mode="json") for a in session.attribution],
     }
+    await _broadcast(body.session_id, "finding.new", session=session, payload=response)
+    return response
 
 
 @router.post("/findings/reject")
@@ -483,13 +595,18 @@ async def reject_finding(body: FindingDecision) -> dict[str, Any]:
         reason=body.reason,
     )
     assert session.score is not None
-    return {
+    _persist(session)
+    response = {
         "rejected": body.finding_id,
         "cascaded": result.cascaded_ids,
         "broken_paths": result.broken_path_ids,
         "score": session.score.model_dump(mode="json"),
         "snapshot": session.snapshot().model_dump(mode="json"),
     }
+    await _broadcast(
+        body.session_id, "finding.rejected", session=session, payload=response
+    )
+    return response
 
 
 @router.post("/findings/restore")
@@ -508,11 +625,16 @@ async def restore_finding(body: FindingDecision) -> dict[str, Any]:
         cascaded=result.cascaded_ids,
     )
     assert session.score is not None
-    return {
+    _persist(session)
+    response = {
         "restored": body.finding_id,
         "cascaded": result.cascaded_ids,
         "score": session.score.model_dump(mode="json"),
     }
+    await _broadcast(
+        body.session_id, "finding.updated", session=session, payload=response
+    )
+    return response
 
 
 @router.post("/findings/edit")
@@ -531,7 +653,12 @@ async def edit_finding(body: FindingEdit) -> dict[str, Any]:
         applied=sorted(applied),
         ignored=sorted(set(body.changes) - set(applied)),
     )
-    return {"finding_id": body.finding_id, "applied": applied}
+    _persist(session)
+    response = {"finding_id": body.finding_id, "applied": applied}
+    await _broadcast(
+        body.session_id, "finding.updated", session=session, payload=response
+    )
+    return response
 
 
 @router.post("/findings/reveal")
@@ -548,6 +675,7 @@ async def reveal(body: RevealRequest) -> dict[str, Any]:
         detail=f"Operator revealed the raw value for '{body.evidence_key}'.",
         evidence_key=body.evidence_key,
     )
+    _persist(session)
     return {"finding_id": body.finding_id, "evidence_key": body.evidence_key, "value": value}
 
 
@@ -571,13 +699,18 @@ async def set_persona(body: PersonaRequest) -> dict[str, Any]:
         before=before,
         after=score.score,
     )
-    return {
+    _persist(session)
+    response = {
         "persona": body.persona,
         "score_before": before,
         "score": score.model_dump(mode="json"),
         "attribution": [a.model_dump(mode="json") for a in session.attribution],
         "note": "Same findings, re-ranked. Nothing was rescanned.",
     }
+    await _broadcast(
+        body.session_id, "score.changed", session=session, payload=response
+    )
+    return response
 
 
 @router.get("/score/{session_id}")
@@ -616,13 +749,18 @@ async def simulate(body: SimulateRequest) -> dict[str, Any]:
                 detail="Operator marked this remediated (simulation).",
             )
 
-    return {
+    _persist(session)
+    response = {
         "score_now": session.score.model_dump(mode="json"),
         "score_projected": projected.model_dump(mode="json"),
         "refused": refused,
         "refused_reason": "These exposures cannot be undone. See each finding's "
         "compensating control." if refused else None,
     }
+    await _broadcast(
+        body.session_id, "score.changed", session=session, payload=response
+    )
+    return response
 
 
 @router.get("/remediation/{session_id}")
@@ -635,19 +773,23 @@ async def remediation(session_id: str, with_copy: bool = True) -> dict[str, Any]
 
 @router.get("/voice/status")
 async def voice_status() -> dict[str, Any]:
-    import os
-
+    status = provider_status()
     return {
-        "stt": "elevenlabs" if os.environ.get("ELEVENLABS_API_KEY") else "unconfigured",
-        "tts": (
-            "elevenlabs"
-            if os.environ.get("ELEVENLABS_API_KEY")
-            and os.environ.get("ELEVENLABS_VOICE_ID")
-            else "browser-fallback"
+        "stt": status["providers"]["elevenlabs_stt"],
+        "tts": status["providers"]["elevenlabs_tts"],
+        "llm": status["providers"]["llm"],
+        "required": status["require_elevenlabs"],
+        "ready": not any(
+            name.startswith("elevenlabs") for name in status["missing_required"]
         ),
-        "llm": get_llm().provider.name,
         "pii_boundary": "scrub_text before LLM and TTS; raw transcript is never returned",
     }
+
+
+@router.get("/providers/status")
+async def providers_status() -> dict[str, Any]:
+    """Deployment posture without exposing credential values."""
+    return provider_status()
 
 
 @router.post("/voice/turn")
@@ -774,16 +916,28 @@ async def live_session(websocket: WebSocket, session_id: str) -> None:
         return
 
     await websocket.accept()
-    await websocket.send_json(
+    send_lock = asyncio.Lock()
+
+    async def send(message: dict[str, Any]) -> None:
+        async with send_lock:
+            await websocket.send_json(message)
+
+    async def forward_events() -> None:
+        async for message in event_bus.subscribe(session_id):
+            await send(message)
+
+    await send(
         {
             "event": "session.snapshot",
             "snapshot": _session(session_id).snapshot().model_dump(mode="json"),
         }
     )
+    forward_task = asyncio.create_task(forward_events())
 
     try:
         while True:
             message = await websocket.receive_json()
+            broadcast_token = _suppress_broadcast.set(True)
             request_id = str(message.get("request_id", ""))
             action = str(message.get("action", ""))
             payload: dict[str, Any] = {}
@@ -862,7 +1016,8 @@ async def live_session(websocket: WebSocket, session_id: str) -> None:
                     raise HTTPException(status_code=400, detail=f"unknown action {action}")
 
                 snapshot = _session(session_id).snapshot().model_dump(mode="json")
-                await websocket.send_json(
+                _suppress_broadcast.reset(broadcast_token)
+                await send(
                     {
                         "request_id": request_id,
                         "event": event,
@@ -871,8 +1026,10 @@ async def live_session(websocket: WebSocket, session_id: str) -> None:
                     }
                 )
             except HTTPException as exc:
+                if _suppress_broadcast.get():
+                    _suppress_broadcast.reset(broadcast_token)
                 detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
-                await websocket.send_json(
+                await send(
                     {
                         "request_id": request_id,
                         "event": "command.error",
@@ -880,8 +1037,10 @@ async def live_session(websocket: WebSocket, session_id: str) -> None:
                     }
                 )
             except Exception as exc:
+                if _suppress_broadcast.get():
+                    _suppress_broadcast.reset(broadcast_token)
                 log.exception("websocket command failed: %s", action)
-                await websocket.send_json(
+                await send(
                     {
                         "request_id": request_id,
                         "event": "command.error",
@@ -890,3 +1049,7 @@ async def live_session(websocket: WebSocket, session_id: str) -> None:
                 )
     except WebSocketDisconnect:
         return
+    finally:
+        forward_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await forward_task

@@ -79,6 +79,22 @@ class ActionLog:
             self._entries.append(entry)
         return entry
 
+    def restore(self, entries: list[ActionLogEntry | dict[str, Any]]) -> None:
+        """Hydrate entries loaded from the encrypted session backend.
+
+        This is intentionally not exposed by the HTTP API; it exists only so
+        a different worker can continue the same append-only sequence.
+        """
+        restored = [
+            entry if isinstance(entry, ActionLogEntry) else ActionLogEntry.model_validate(entry)
+            for entry in entries
+        ]
+        for expected, entry in enumerate(restored, start=1):
+            if entry.session_id != self.session_id or entry.seq != expected:
+                raise ValueError("invalid persisted action-log sequence")
+        with self._lock:
+            self._entries = restored
+
     def entries(self, since: int = 0, limit: int | None = None) -> list[ActionLogEntry]:
         with self._lock:
             window = self._entries[since:]

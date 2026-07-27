@@ -70,21 +70,22 @@ deterministic local grounding path and labelled as a fallback.
 - Reveal operations are scoped, authenticated by HMAC tokens, and logged.
 - Irreversible findings require a compensating control in the schema.
 - Map markers are privacy-jittered; exact coordinates remain behind reveal.
-- Session wipe destroys the in-memory findings graph and raw-value vault.
+- Session wipe destroys the Redis/in-memory findings graph and raw-value vault.
 
 ## Known limitations
 
-- The current repository does not contain Engineer A’s production identity
-  verification or Redis TTL service. The demo creates a pre-verified,
-  clearly-labelled local identity.
-- The orchestration implements the LangGraph interrupt/resume protocol but is
-  a direct state machine, not a LangGraph runtime.
-- WebSocket state is process-local and not a multi-worker broadcast bus.
+- Production mode verifies signed OIDC/JWKS or internal HS256 identity
+  assertions. Offline development mode still permits a clearly-labelled local
+  identity so tests do not depend on an identity provider.
+- Approval uses real LangGraph interrupts with Redis, SQLite, or in-memory
+  checkpointers.
+- Redis sessions are encrypted, TTL-bound, conflict-checked, and shared across
+  workers; Redis Pub/Sub fans state changes out to every WebSocket worker.
 - Browser speech synthesis varies by platform.
 - Map positions are intentionally illustrative until a user explicitly
   reveals a coordinate.
-- Cached HIBP/Sherlock and mock findings are suitable for a disclosed demo,
-  not evidence of a live scan.
+- Cached HIBP/Sherlock and mock findings remain suitable for a disclosed demo,
+  not evidence of a live scan. Strict production mode refuses those fallbacks.
 
 ## Evaluation
 

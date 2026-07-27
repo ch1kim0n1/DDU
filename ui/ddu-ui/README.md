@@ -44,6 +44,12 @@ Open `http://localhost:5173`. The UI creates an ephemeral, judge-safe demo
 session and connects to `http://localhost:8120` by default. Set
 `VITE_MIRROR_API_URL` when the service lives elsewhere.
 
+For production identity mode, the host login surface places its short-lived
+OIDC/service assertion in `sessionStorage["ddu.identityToken"]`. The API
+verifies the token and returns a server-generated high-entropy session id; the
+UI never trusts the identifier fields in its demo request. Mock seeding is
+disabled in production unless `VITE_MIRROR_SEED_MOCKS=true` is explicitly set.
+
 ## Voice configuration
 
 Copy `services/ddu-mirror-intel/.env.example` to an ignored `.env` or provide

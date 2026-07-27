@@ -22,8 +22,12 @@ from ddu_common.version import ServiceVersion, from_env
 from mirror_intel import __version__
 from mirror_intel.api import router
 from mirror_intel.llm import get_llm
+from mirror_intel.events import event_bus
+from mirror_intel.identity import verifier
+from mirror_intel.providers import provider_status
 from mirror_intel.schema import CONTRACT_VERSION
 from mirror_intel.session import store
+from mirror_intel.workflow import runtime
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("ddu-mirror-intel")
@@ -60,12 +64,33 @@ async def readyz() -> dict:
     ``llm_provider == "offline"`` is the one to watch: the service is fully
     functional there, but remediation copy is canned and the UI must say so.
     """
+    providers = provider_status()
+    session_store_ready = store.healthy()
+    event_bus_ready = await event_bus.healthy()
+    ready = providers["ready"] and session_store_ready and event_bus_ready
     return {
-        "state": "READY",
+        "state": "READY" if ready else "DEGRADED",
         "contract_version": CONTRACT_VERSION,
         "llm_provider": get_llm().provider.name,
         "hibp_key_configured": bool(os.environ.get("HIBP_API_KEY")),
-        "sessions": store.stats(),
+        "sessions": (
+            store.stats()
+            if session_store_ready
+            else {
+                "backend": store.backend_name,
+                "ttl_seconds": store.ttl_seconds,
+                "sessions": None,
+                "findings": None,
+            }
+        ),
+        "session_store_ready": session_store_ready,
+        "event_bus": {
+            "backend": event_bus.backend_name,
+            "ready": event_bus_ready,
+        },
+        "workflow": runtime.status(),
+        "identity": verifier.status(),
+        "external_providers": providers,
         "design_rules_enforced": [
             "1 — no verified control, no scan (guardrails.assert_self)",
             "2 — no third-party traversal (guardrails.suppress_third_party)",

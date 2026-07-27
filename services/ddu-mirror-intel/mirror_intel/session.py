@@ -19,7 +19,11 @@ vault, which is what makes the ephemeral guarantee real rather than cosmetic.
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
+import os
+import secrets
 import threading
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Sequence
@@ -49,6 +53,7 @@ class Session:
     session_id: str
     identity: VerifiedIdentity
     persona: str = DEFAULT_PERSONA
+    revision: int = 0
 
     findings: list[Finding] = field(default_factory=list)
     proposals: dict[str, Proposal] = field(default_factory=dict)
@@ -59,6 +64,9 @@ class Session:
     #: reveal_token -> raw value. Never serialized, never logged, never sent
     #: to a vendor. Dies with the session.
     vault: dict[str, str] = field(default_factory=dict)
+    #: Serializable orchestration internals (pending full inputs, cancellation
+    #: state, proposal sequence). Never returned in SessionSnapshot.
+    workflow_state: dict[str, Any] = field(default_factory=dict)
 
     log: ActionLog = field(init=False)
     _lock: threading.RLock = field(init=False, repr=False)
@@ -208,6 +216,66 @@ class Session:
                 action_log_tail=self.log.tail(log_tail),
             )
 
+    def export_state(self) -> dict[str, Any]:
+        """Serializable, complete state for an encrypted backend."""
+        with self._lock:
+            return {
+                "version": 1,
+                "revision": self.revision,
+                "session_id": self.session_id,
+                "identity": {
+                    "emails": sorted(self.identity.emails),
+                    "handles": sorted(self.identity.handles),
+                    "account_urls": sorted(self.identity.account_urls),
+                    "subject_ref": self.identity.subject_ref,
+                },
+                "persona": self.persona,
+                "findings": [finding.model_dump(mode="json") for finding in self.findings],
+                "proposals": {
+                    proposal_id: proposal.model_dump(mode="json")
+                    for proposal_id, proposal in self.proposals.items()
+                },
+                "vault": dict(self.vault),
+                "workflow_state": self.workflow_state,
+                "action_log": [
+                    entry.model_dump(mode="json") for entry in self.log.entries()
+                ],
+            }
+
+    @classmethod
+    def import_state(cls, payload: dict[str, Any]) -> "Session":
+        if payload.get("version") != 1:
+            raise ValueError("unsupported persisted session version")
+        session_id = str(payload["session_id"])
+        identity_payload = dict(payload["identity"])
+        identity = VerifiedIdentity.build(
+            session_id=session_id,
+            emails=identity_payload.get("emails", []),
+            handles=identity_payload.get("handles", []),
+            account_urls=identity_payload.get("account_urls", []),
+            subject_ref=str(identity_payload["subject_ref"]),
+        )
+        session = cls(
+            session_id=session_id,
+            identity=identity,
+            persona=str(payload.get("persona", DEFAULT_PERSONA)),
+            revision=int(payload.get("revision", 0)),
+        )
+        session.findings = [
+            Finding.model_validate(item) for item in payload.get("findings", [])
+        ]
+        session.proposals = {
+            str(proposal_id): Proposal.model_validate(item)
+            for proposal_id, item in dict(payload.get("proposals", {})).items()
+        }
+        session.vault = {
+            str(key): str(value) for key, value in dict(payload.get("vault", {})).items()
+        }
+        session.workflow_state = dict(payload.get("workflow_state", {}))
+        session.log.restore(list(payload.get("action_log", [])))
+        session._recompute()
+        return session
+
 
 class SessionStore:
     """In-memory registry. Swappable for A's Redis-backed store.
@@ -226,6 +294,20 @@ class SessionStore:
         with self._lock:
             self._sessions[session.session_id] = session
         return session
+
+    @property
+    def backend_name(self) -> str:
+        return "memory"
+
+    @property
+    def ttl_seconds(self) -> int | None:
+        return None
+
+    def persist(self, session: Session) -> None:
+        """Memory sessions are already live; durable stores override this."""
+
+    def healthy(self) -> bool:
+        return True
 
     def get(self, session_id: str) -> Session | None:
         return self._sessions.get(session_id)
@@ -248,8 +330,188 @@ class SessionStore:
         return {
             "sessions": len(self._sessions),
             "findings": sum(len(s.findings) for s in self._sessions.values()),
+            "backend": self.backend_name,
+            "ttl_seconds": self.ttl_seconds,
         }
 
 
-#: Process-wide store. A's service replaces this wholesale.
-store = SessionStore()
+class SessionConflictError(RuntimeError):
+    """A different worker updated the session after this request loaded it."""
+
+
+class RedisSessionStore(SessionStore):
+    """Encrypted Redis session registry with sliding TTL and optimistic CAS."""
+
+    def __init__(
+        self,
+        redis_url: str,
+        encryption_key: str,
+        *,
+        ttl_seconds: int = 1800,
+        key_prefix: str = "ddu:mirror:session:",
+    ) -> None:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        from redis import Redis
+
+        try:
+            padding = "=" * (-len(encryption_key) % 4)
+            key = base64.urlsafe_b64decode(encryption_key + padding)
+        except Exception as exc:
+            raise RuntimeError("MIRROR_SESSION_ENCRYPTION_KEY is not valid base64") from exc
+        if len(key) != 32:
+            raise RuntimeError(
+                "MIRROR_SESSION_ENCRYPTION_KEY must decode to exactly 32 bytes"
+            )
+        if ttl_seconds < 60:
+            raise RuntimeError("MIRROR_SESSION_TTL_SECONDS must be at least 60")
+        self._client = Redis.from_url(redis_url, decode_responses=True)
+        self._aes = AESGCM(key)
+        self._ttl = ttl_seconds
+        self._prefix = key_prefix
+
+    @staticmethod
+    def generate_encryption_key() -> str:
+        return base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip("=")
+
+    @property
+    def backend_name(self) -> str:
+        return "redis-encrypted"
+
+    @property
+    def ttl_seconds(self) -> int:
+        return self._ttl
+
+    def _key(self, session_id: str) -> str:
+        return f"{self._prefix}{session_id}"
+
+    def _encode(self, session: Session) -> str:
+        key = self._key(session.session_id)
+        nonce = secrets.token_bytes(12)
+        plaintext = json.dumps(
+            session.export_state(), separators=(",", ":"), sort_keys=True
+        ).encode()
+        ciphertext = self._aes.encrypt(nonce, plaintext, key.encode())
+        return json.dumps(
+            {
+                "version": 1,
+                "revision": session.revision,
+                "nonce": base64.b64encode(nonce).decode(),
+                "ciphertext": base64.b64encode(ciphertext).decode(),
+            },
+            separators=(",", ":"),
+        )
+
+    def _decode(self, key: str, encoded: str) -> Session:
+        envelope = json.loads(encoded)
+        if envelope.get("version") != 1:
+            raise ValueError("unsupported encrypted session envelope")
+        nonce = base64.b64decode(envelope["nonce"], validate=True)
+        ciphertext = base64.b64decode(envelope["ciphertext"], validate=True)
+        plaintext = self._aes.decrypt(nonce, ciphertext, key.encode())
+        payload = json.loads(plaintext)
+        session = Session.import_state(payload)
+        if session.revision != int(envelope["revision"]):
+            raise ValueError("persisted session revision mismatch")
+        return session
+
+    def create(self, identity: VerifiedIdentity, persona: str = DEFAULT_PERSONA) -> Session:
+        session = Session(session_id=identity.session_id, identity=identity, persona=persona)
+        if not self._client.set(
+            self._key(session.session_id),
+            self._encode(session),
+            ex=self._ttl,
+            nx=True,
+        ):
+            raise ValueError(f"session {session.session_id} already exists")
+        return session
+
+    def get(self, session_id: str) -> Session | None:
+        key = self._key(session_id)
+        encoded = self._client.get(key)
+        if encoded is None:
+            return None
+        self._client.expire(key, self._ttl)
+        return self._decode(key, encoded)
+
+    def persist(self, session: Session) -> None:
+        from redis import WatchError
+
+        key = self._key(session.session_id)
+        expected = session.revision
+        with self._client.pipeline() as pipeline:
+            try:
+                pipeline.watch(key)
+                current = pipeline.get(key)
+                if current is None:
+                    raise KeyError(f"unknown or expired session {session.session_id}")
+                envelope = json.loads(current)
+                if int(envelope["revision"]) != expected:
+                    raise SessionConflictError(
+                        "session changed on another worker; refresh and retry"
+                    )
+                session.revision = expected + 1
+                encoded = self._encode(session)
+                pipeline.multi()
+                pipeline.set(key, encoded, ex=self._ttl)
+                pipeline.execute()
+            except WatchError as exc:
+                session.revision = expected
+                raise SessionConflictError(
+                    "session changed on another worker; refresh and retry"
+                ) from exc
+            except Exception:
+                session.revision = expected
+                raise
+
+    def drop(self, session_id: str) -> dict[str, int] | None:
+        session = self.get(session_id)
+        if session is None:
+            return None
+        counts = session.wipe()
+        self._client.delete(self._key(session_id))
+        return counts
+
+    def ids(self) -> list[str]:
+        return [
+            key.removeprefix(self._prefix)
+            for key in self._client.scan_iter(match=f"{self._prefix}*")
+        ]
+
+    def stats(self) -> dict[str, Any]:
+        session_ids = self.ids()
+        findings = 0
+        for session_id in session_ids:
+            session = self.get(session_id)
+            findings += len(session.findings) if session else 0
+        return {
+            "sessions": len(session_ids),
+            "findings": findings,
+            "backend": self.backend_name,
+            "ttl_seconds": self.ttl_seconds,
+        }
+
+    def healthy(self) -> bool:
+        try:
+            return bool(self._client.ping())
+        except Exception:
+            return False
+
+
+def build_session_store() -> SessionStore:
+    redis_url = os.environ.get("MIRROR_REDIS_URL", "").strip()
+    if not redis_url:
+        return SessionStore()
+    encryption_key = os.environ.get("MIRROR_SESSION_ENCRYPTION_KEY", "").strip()
+    if not encryption_key:
+        raise RuntimeError(
+            "MIRROR_REDIS_URL requires MIRROR_SESSION_ENCRYPTION_KEY so PII is "
+            "never written to Redis in plaintext"
+        )
+    return RedisSessionStore(
+        redis_url,
+        encryption_key,
+        ttl_seconds=int(os.environ.get("MIRROR_SESSION_TTL_SECONDS", "1800")),
+    )
+
+
+store = build_session_store()

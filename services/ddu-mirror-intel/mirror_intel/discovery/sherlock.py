@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from ..guardrails import VerifiedIdentity, assert_self, suppress_third_party
+from ..providers import truthy
 from ..redaction import redact_evidence
 from ..reversibility import classify
 from ..schema import Finding, FindingType, Origin, VerificationState
@@ -82,16 +83,19 @@ def _load_cache() -> dict[str, Any]:
         return {}
 
 
-def _run_sherlock(handle: str, timeout: int = 45) -> list[dict[str, Any]]:
+def _run_sherlock(handle: str, timeout: int = 45) -> list[dict[str, Any]] | None:
     """Shell out to Sherlock if it is installed, otherwise return nothing.
 
     Deliberately not a hard dependency: the demo path runs from cache, and a
     missing binary should degrade to cached results rather than a 500.
     """
+    if not truthy("MIRROR_SHERLOCK_LIVE"):
+        log.info("MIRROR_SHERLOCK_LIVE is disabled; using cached results only")
+        return None
     binary = shutil.which("sherlock")
     if not binary:
         log.info("sherlock not on PATH; using cached results only")
-        return []
+        return None
 
     cmd = [binary, handle, "--print-found", "--timeout", "5", "--no-color"]
     for site in SITES:
@@ -101,7 +105,10 @@ def _run_sherlock(handle: str, timeout: int = 45) -> list[dict[str, Any]]:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except (subprocess.TimeoutExpired, OSError) as exc:
         log.warning("sherlock run failed (%s); using cached results", exc)
-        return []
+        return None
+    if proc.returncode not in (0, 1):
+        log.warning("sherlock exited %s; using cached results", proc.returncode)
+        return None
 
     results: list[dict[str, Any]] = []
     for line in proc.stdout.splitlines():
@@ -132,9 +139,14 @@ def account_findings(
     """
     normalized = assert_self(identity, handle)
 
-    raw = _run_sherlock(normalized)
+    live_results = _run_sherlock(normalized)
+    if live_results is None and truthy("MIRROR_REQUIRE_LIVE_PROVIDERS"):
+        raise RuntimeError(
+            "Sherlock live provider is required but unavailable; refusing cached data"
+        )
+    raw = live_results or []
     from_cache = False
-    if not raw and use_cache:
+    if live_results is None and use_cache:
         raw = _load_cache().get(normalized.lstrip("@"), [])
         from_cache = bool(raw)
 
@@ -193,6 +205,7 @@ def account_findings(
 
     meta = {
         "worker": "sherlock",
+        "live": live_results is not None,
         "sites_checked": len(SITES),
         "from_cache": from_cache,
         "suppressed_third_party": report.suppressed_count,
