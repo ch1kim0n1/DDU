@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field, ValidationError
 
 from . import actionlog as A
@@ -37,6 +37,7 @@ from .records import jurisdictions, personalize
 from .remediation import build_checklist
 from .schema import CONTRACT_VERSION, Finding, Origin
 from .session import store
+from .voice import VoiceConfigurationError, answer_turn
 
 log = logging.getLogger("mirror-intel.api")
 
@@ -142,6 +143,14 @@ class RecordsRequest(BaseModel):
     state: str
     county: str | None = None
     persona: str = "scammer"
+
+
+class VoiceTurnRequest(BaseModel):
+    session_id: str
+    transcript: str | None = None
+    audio_base64: str | None = None
+    mime_type: str = "audio/webm"
+    mode: str = "question"
 
 
 def _session(session_id: str):
@@ -624,6 +633,49 @@ async def remediation(session_id: str, with_copy: bool = True) -> dict[str, Any]
     return checklist.as_dict()
 
 
+@router.get("/voice/status")
+async def voice_status() -> dict[str, Any]:
+    import os
+
+    return {
+        "stt": "elevenlabs" if os.environ.get("ELEVENLABS_API_KEY") else "unconfigured",
+        "tts": (
+            "elevenlabs"
+            if os.environ.get("ELEVENLABS_API_KEY")
+            and os.environ.get("ELEVENLABS_VOICE_ID")
+            else "browser-fallback"
+        ),
+        "llm": get_llm().provider.name,
+        "pii_boundary": "scrub_text before LLM and TTS; raw transcript is never returned",
+    }
+
+
+@router.post("/voice/turn")
+async def voice_turn(body: VoiceTurnRequest) -> dict[str, Any]:
+    """STT -> local PII scrub -> grounded voice-tier LLM -> scrub -> TTS."""
+    session = _session(body.session_id)
+    if body.mode not in {"question", "narrate"}:
+        raise HTTPException(status_code=400, detail="mode must be question or narrate")
+    if body.mode == "question" and not (body.transcript or body.audio_base64):
+        raise HTTPException(status_code=400, detail="provide transcript or audio_base64")
+    try:
+        result = await answer_turn(
+            session,
+            transcript=body.transcript,
+            audio_base64=body.audio_base64,
+            mime_type=body.mime_type,
+            mode=body.mode,
+        )
+    except VoiceConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except (ValueError, ValidationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("voice turn failed")
+        raise HTTPException(status_code=502, detail=f"voice provider failed: {exc}") from exc
+    return result.as_dict()
+
+
 # ── guardrail demos ─────────────────────────────────────────────────────
 
 
@@ -706,3 +758,135 @@ async def mock_findings(session_id: str = "sess_demo", count: int | None = None)
         "attribution": [a.model_dump(mode="json") for a in attribute(weighted, "scammer")],
         "score": compute_score(weighted, "scammer").model_dump(mode="json"),
     }
+
+
+@router.websocket("/ws/{session_id}")
+async def live_session(websocket: WebSocket, session_id: str) -> None:
+    """Bidirectional interrupt/resume adapter consumed by Engineer D's UI.
+
+    Commands travel over the socket; each acknowledgement includes the full
+    recomputed snapshot. The underlying orchestrator remains the same
+    approve/edit/reject state machine, so WebSocket transport cannot bypass
+    its human authorization check.
+    """
+    if store.get(session_id) is None:
+        await websocket.close(code=4404, reason="unknown session")
+        return
+
+    await websocket.accept()
+    await websocket.send_json(
+        {
+            "event": "session.snapshot",
+            "snapshot": _session(session_id).snapshot().model_dump(mode="json"),
+        }
+    )
+
+    try:
+        while True:
+            message = await websocket.receive_json()
+            request_id = str(message.get("request_id", ""))
+            action = str(message.get("action", ""))
+            payload: dict[str, Any] = {}
+            event = "session.snapshot"
+
+            try:
+                if action == "agent.expand":
+                    payload = await plan(
+                        PlanRequest(
+                            session_id=session_id,
+                            state=message.get("state"),
+                            county=message.get("county"),
+                            scraped_bio=message.get("scraped_bio"),
+                            bio_source=message.get("bio_source"),
+                        )
+                    )
+                    event = "agent.awaiting_approval"
+                elif action == "proposal.approve":
+                    payload = await approve(
+                        DecisionRequest(
+                            session_id=session_id,
+                            proposal_id=str(message.get("proposal_id", "")),
+                        )
+                    )
+                    event = "finding.new"
+                elif action == "proposal.reject":
+                    payload = await reject_proposal(
+                        DecisionRequest(
+                            session_id=session_id,
+                            proposal_id=str(message.get("proposal_id", "")),
+                            reason=str(message.get("reason", "Operator declined.")),
+                        )
+                    )
+                    event = "finding.updated"
+                elif action == "proposal.edit":
+                    payload = await edit_proposal(
+                        EditRequest(
+                            session_id=session_id,
+                            proposal_id=str(message.get("proposal_id", "")),
+                            changes=dict(message.get("changes") or {}),
+                            reason=message.get("reason"),
+                        )
+                    )
+                    event = "finding.new"
+                elif action == "finding.reject":
+                    payload = await reject_finding(
+                        FindingDecision(
+                            session_id=session_id,
+                            finding_id=str(message.get("finding_id", "")),
+                            reason=str(message.get("reason", "That's not me")),
+                        )
+                    )
+                    event = "finding.rejected"
+                elif action == "finding.restore":
+                    payload = await restore_finding(
+                        FindingDecision(
+                            session_id=session_id,
+                            finding_id=str(message.get("finding_id", "")),
+                        )
+                    )
+                    event = "finding.updated"
+                elif action == "persona.change":
+                    payload = await set_persona(
+                        PersonaRequest(
+                            session_id=session_id,
+                            persona=str(message.get("persona", "")),
+                        )
+                    )
+                    event = "score.changed"
+                elif action == "agent.cancel":
+                    payload = await cancel(PlanRequest(session_id=session_id))
+                    event = "finding.updated"
+                elif action == "session.snapshot":
+                    payload = {}
+                else:
+                    raise HTTPException(status_code=400, detail=f"unknown action {action}")
+
+                snapshot = _session(session_id).snapshot().model_dump(mode="json")
+                await websocket.send_json(
+                    {
+                        "request_id": request_id,
+                        "event": event,
+                        "payload": payload,
+                        "snapshot": snapshot,
+                    }
+                )
+            except HTTPException as exc:
+                detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+                await websocket.send_json(
+                    {
+                        "request_id": request_id,
+                        "event": "command.error",
+                        "error": detail,
+                    }
+                )
+            except Exception as exc:
+                log.exception("websocket command failed: %s", action)
+                await websocket.send_json(
+                    {
+                        "request_id": request_id,
+                        "event": "command.error",
+                        "error": str(exc),
+                    }
+                )
+    except WebSocketDisconnect:
+        return

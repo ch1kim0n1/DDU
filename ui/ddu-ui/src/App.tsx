@@ -1,272 +1,168 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 
-import {
-  api,
-  getRole,
-  setRole,
-  type Entity,
-  type Evidence,
-  type Investigation,
-  type Relationship,
-  type TimelineEvent,
-} from "./api";
-import {GraphView} from "./GraphView";
-import {MapView} from "./MapView";
+import {EvidenceDrawer} from "./EvidenceDrawer";
+import {mirrorApi, websocketURL} from "./mirror-api";
+import {MirrorMap} from "./MirrorMap";
 import {Scene3D} from "./Scene3D";
-import {TimelineView} from "./TimelineView";
-import {
-  useCaseMotion,
-  useCountUp,
-  useHomeMotion,
-  useIntelLogMotion,
-  useShellMotion,
-  useTabPanelMotion,
-} from "./useMotion";
+import type {
+  Finding,
+  Proposal,
+  SessionSnapshot,
+  SimulationResult,
+} from "./mirror-types";
+import {VoicePanel} from "./VoicePanel";
 
-function navigate(path: string) {
-  window.history.pushState({}, "", path);
-  window.dispatchEvent(new PopStateEvent("popstate"));
-}
+const PERSONAS = [
+  {id: "scammer", label: "Account takeover"},
+  {id: "stalker", label: "Personal safety"},
+  {id: "employer", label: "Employer screening"},
+  {id: "state", label: "State actor"},
+];
 
-function Link({
-  to,
-  children,
-  className,
-}: {
-  to: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <a
-      className={className}
-      href={to}
-      onClick={(event) => {
-        event.preventDefault();
-        navigate(to);
-      }}
-    >
-      {children}
-    </a>
-  );
-}
+type CommandResult = {
+  snapshot?: SessionSnapshot;
+  payload?: Record<string, unknown>;
+};
 
-function Shell({children}: {children: ReactNode}) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  useShellMotion(rootRef);
-
-  return (
-    <div className="shell" ref={rootRef}>
-      <header className="masthead">
-        <Link className="brand" to="/">
-          <span className="brand-mark" aria-hidden="true">
-            DDU
-          </span>
-          <span>
-            <strong>Digital Detective Unit</strong>
-            <small>Evidence desk / Phases 1–3</small>
-          </span>
-        </Link>
-        <div className="system-state">
-          <label>
-            Role
-            <select
-              defaultValue={getRole()}
-              onChange={(event) => { void setRole(event.target.value); }}
-            >
-              <option value="viewer">viewer</option>
-              <option value="investigator">investigator</option>
-              <option value="analyst">analyst</option>
-              <option value="admin">admin</option>
-            </select>
-          </label>
-          <i />
-          Local operations
-        </div>
-      </header>
-      <main className="shell-main">{children}</main>
-      <footer>
-        <span>Observations remain observations.</span>
-        <span>Evidence-backed · provenance-preserved</span>
-      </footer>
-    </div>
-  );
-}
-
-function HomePage() {
-  const [investigations, setInvestigations] = useState<Investigation[]>([]);
-  const [name, setName] = useState("");
-  const [error, setError] = useState("");
-  const [creating, setCreating] = useState(false);
-  const pageRef = useRef<HTMLDivElement>(null);
-  useHomeMotion(pageRef, investigations.length);
-
-  useEffect(() => {
-    api.listInvestigations().then(setInvestigations).catch((reason: Error) => {
-      setError(reason.message);
+function collectDescendants(findings: Finding[], rootId: string) {
+  const ids = new Set([rootId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    findings.forEach((finding) => {
+      if (finding.parent_id && ids.has(finding.parent_id) && !ids.has(finding.id)) {
+        ids.add(finding.id);
+        changed = true;
+      }
     });
+  }
+  return ids;
+}
+
+function activeFindings(snapshot: SessionSnapshot | null) {
+  return (
+    snapshot?.findings.filter(
+      (finding) =>
+        finding.verification_state !== "rejected" &&
+        finding.verification_state !== "contradicted",
+    ) || []
+  );
+}
+
+export default function App() {
+  const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null);
+  const [selected, setSelected] = useState<Finding | null>(null);
+  const [view, setView] = useState<"scene" | "map">("scene");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const [socketState, setSocketState] = useState<"connecting" | "live" | "fallback">(
+    "connecting",
+  );
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+  const [fixedIds, setFixedIds] = useState<Set<string>>(new Set());
+  const [simulation, setSimulation] = useState<SimulationResult | null>(null);
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [wipeState, setWipeState] = useState<{
+    active: boolean;
+    counts?: Record<string, number>;
+    complete?: boolean;
+  }>({active: false});
+  const socketRef = useRef<WebSocket | null>(null);
+  const pendingCommands = useRef(
+    new Map<string, {resolve: (value: CommandResult) => void; reject: (reason: Error) => void}>(),
+  );
+  const sessionId = snapshot?.session_id || "";
+
+  const connectSocket = useCallback((id: string) => {
+    socketRef.current?.close();
+    setSocketState("connecting");
+    try {
+      const socket = new WebSocket(websocketURL(id));
+      socketRef.current = socket;
+      socket.onopen = () => setSocketState("live");
+      socket.onclose = () => setSocketState("fallback");
+      socket.onerror = () => setSocketState("fallback");
+      socket.onmessage = (event) => {
+        const message = JSON.parse(event.data) as {
+          request_id?: string;
+          snapshot?: SessionSnapshot;
+          payload?: Record<string, unknown>;
+          error?: string;
+        };
+        if (message.snapshot) setSnapshot(message.snapshot);
+        if (message.request_id) {
+          const pending = pendingCommands.current.get(message.request_id);
+          if (pending) {
+            pendingCommands.current.delete(message.request_id);
+            if (message.error) pending.reject(new Error(message.error));
+            else pending.resolve({snapshot: message.snapshot, payload: message.payload});
+          }
+        }
+      };
+    } catch {
+      setSocketState("fallback");
+    }
   }, []);
 
-  async function create(event: FormEvent) {
-    event.preventDefault();
-    if (!name.trim()) return;
-    setCreating(true);
+  const startDemo = useCallback(async () => {
+    setLoading(true);
     setError("");
+    const id = `sess_demo_${Date.now().toString(36)}`;
     try {
-      const investigation = await api.createInvestigation(name.trim());
-      navigate(`/investigations/${investigation.id}`);
+      await mirrorApi.health();
+      const created = await mirrorApi.createSession(id, "scammer", true);
+      setSnapshot(created.snapshot);
+      connectSocket(id);
+      await mirrorApi.plan(id);
+      setSnapshot(await mirrorApi.snapshot(id));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Creation failed");
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  return (
-    <Shell>
-      <div className="page-motion" ref={pageRef}>
-        <section className="hero">
-          <div>
-            <p className="eyebrow">Investigation registry</p>
-            <h1>Open a case. Follow the evidence.</h1>
-            <p className="lede">
-              Upload source imagery and review machine observations without
-              collapsing detection into fact.
-            </p>
-          </div>
-          <form className="create-card" onSubmit={create}>
-            <span className="card-index">NEW / 01</span>
-            <label htmlFor="investigation-name">Investigation name</label>
-            <input
-              id="investigation-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Operation name or case reference"
-              autoComplete="off"
-            />
-            <button disabled={creating || !name.trim()} type="submit">
-              {creating ? "Opening case…" : "Create investigation"}
-            </button>
-            {error && <p className="error">{error}</p>}
-          </form>
-        </section>
-
-        <section className="registry">
-          <div className="section-heading">
-            <h2>Active investigations</h2>
-            <span>{investigations.length.toString().padStart(2, "0")} files</span>
-          </div>
-          {investigations.length === 0 && !error ? (
-            <div className="empty-state">
-              <span>∅</span>
-              No investigations registered in this session.
-            </div>
-          ) : (
-            <div className="case-grid">
-              {investigations.map((investigation, index) => (
-                <Link
-                  className="case-file"
-                  key={investigation.id}
-                  to={`/investigations/${investigation.id}`}
-                >
-                  <span className="case-number">
-                    CASE {(index + 1).toString().padStart(3, "0")}
-                  </span>
-                  <h3>{investigation.name}</h3>
-                  <code>{investigation.id}</code>
-                  <time>{formatDate(investigation.created_at)}</time>
-                  <b>Open file →</b>
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-    </Shell>
-  );
-}
-
-function InvestigationPage({id}: {id: string}) {
-  const [investigation, setInvestigation] = useState<Investigation>();
-  const [entities, setEntities] = useState<Entity[]>([]);
-  const [observations, setObservations] = useState<Entity[]>([]);
-  const [evidence, setEvidence] = useState<Evidence[]>([]);
-  const [relationships, setRelationships] = useState<Relationship[]>([]);
-  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
-  const [lineageCount, setLineageCount] = useState(0);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState("");
-  const [username, setUsername] = useState("");
-  const [sourceURL, setSourceURL] = useState("");
-  const [typeName, setTypeName] = useState("");
-  const [customTypes, setCustomTypes] = useState<string[]>([]);
-  const [tab, setTab] = useState<"graph" | "map" | "timeline" | "intel" | "scene" | "list">("graph");
-  const [intelLog, setIntelLog] = useState<string>("");
-  const [scene, setScene] = useState<{nodes: Array<{id: string; label?: string; type?: string; x: number; y: number; z: number; confidence?: number}>; edges: Array<{id: string; source: string; target: string; confidence?: number}>}>({nodes: [], edges: []});
-  const [playback, setPlayback] = useState<Array<{frame: number; narrative?: string}>>([]);
-  const pageRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const intelLogRef = useRef<HTMLPreElement>(null);
-  useCaseMotion(pageRef, Boolean(investigation));
-  useTabPanelMotion(panelRef, tab);
-  useIntelLogMotion(intelLogRef, intelLog);
-
-  const load = useCallback(async () => {
-    try {
-      const [
-        caseData,
-        entityData,
-        observationData,
-        lineageData,
-        evidenceData,
-        relationshipData,
-        timelineData,
-        ontologyData,
-      ] = await Promise.all([
-        api.getInvestigation(id),
-        api.listEntities(id),
-        api.listObservations(id),
-        api.listLineage(id),
-        api.listEvidence(id),
-        api.listRelationships(id),
-        api.timeline(id),
-        api.listOntologyTypes(id),
-      ]);
-      setInvestigation(caseData);
-      setEntities(entityData);
-      setObservations(observationData);
-      setLineageCount(lineageData.count);
-      setEvidence(evidenceData);
-      setRelationships(relationshipData);
-      setTimeline(timelineData);
-      setCustomTypes(
-        (ontologyData.entity_types || [])
-          .filter((item: {custom?: boolean}) => item.custom)
-          .map((item: {name: string}) => item.name),
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "The Mirror intelligence service is unavailable.",
       );
-      setError("");
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to load case");
+    } finally {
+      setLoading(false);
     }
-  }, [id]);
+  }, [connectSocket]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void startDemo();
+    return () => socketRef.current?.close();
+  }, [startDemo]);
 
-  async function runAction(label: string, action: () => Promise<unknown>) {
+  async function command(
+    action: string,
+    payload: Record<string, unknown>,
+    fallback: () => Promise<unknown>,
+  ) {
+    const socket = socketRef.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      const requestId = crypto.randomUUID();
+      const response = new Promise<CommandResult>((resolve, reject) => {
+        pendingCommands.current.set(requestId, {resolve, reject});
+        window.setTimeout(() => {
+          const pending = pendingCommands.current.get(requestId);
+          if (pending) {
+            pendingCommands.current.delete(requestId);
+            reject(new Error("Live command timed out"));
+          }
+        }, 20_000);
+      });
+      socket.send(JSON.stringify({request_id: requestId, action, ...payload}));
+      return response;
+    }
+    await fallback();
+    if (sessionId) setSnapshot(await mirrorApi.snapshot(sessionId));
+    return {};
+  }
+
+  async function run(label: string, action: () => Promise<unknown>) {
     setBusy(label);
     setError("");
     try {
       await action();
-      await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : `${label} failed`);
     } finally {
@@ -274,557 +170,448 @@ function InvestigationPage({id}: {id: string}) {
     }
   }
 
-  return (
-    <Shell>
-      <div className="page-motion case-motion" ref={pageRef}>
-      <div className="case-header">
-        <div>
-          <Link className="back-link" to="/">← Registry</Link>
-          <p className="eyebrow">Investigation file</p>
-          <h1>{investigation?.name || "Loading case…"}</h1>
-          <code>{id}</code>
-        </div>
-        <label className={`upload-control ${busy === "image" ? "busy" : ""}`}>
-          <input
-            accept="image/*"
-            disabled={Boolean(busy)}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (!file) return;
-              void runAction("image", () => api.uploadImage(id, file));
-            }}
-            type="file"
-          />
-          <span>{busy === "image" ? "Processing image…" : "＋ Upload image"}</span>
-        </label>
-      </div>
+  async function decideProposal(proposal: Proposal, decision: "approve" | "reject") {
+    if (!snapshot) return;
+    await run(`${decision}:${proposal.id}`, async () => {
+      await command(
+        decision === "approve" ? "proposal.approve" : "proposal.reject",
+        {proposal_id: proposal.id},
+        () =>
+          decision === "approve"
+            ? mirrorApi.approve(snapshot.session_id, proposal.id)
+            : mirrorApi.rejectProposal(snapshot.session_id, proposal.id),
+      );
+      if (socketState !== "live") {
+        setSnapshot(await mirrorApi.snapshot(snapshot.session_id));
+      }
+    });
+  }
 
-      <section className="intake-grid">
-        <form
-          className="intake-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!username.trim()) return;
-            void runAction("username", () => api.processUsername(id, username.trim()));
-          }}
-        >
-          <label>
-            Username workflow
-            <input
-              disabled={Boolean(busy)}
-              onChange={(event) => setUsername(event.target.value)}
-              placeholder="handle"
-              value={username}
-            />
-          </label>
-          <button disabled={Boolean(busy) || !username.trim()} type="submit">
-            {busy === "username" ? "Discovering…" : "Run discovery"}
-          </button>
-        </form>
-        <form
-          className="intake-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!sourceURL.trim()) return;
-            void runAction("url", () => api.processURL(id, sourceURL.trim()));
-          }}
-        >
-          <label>
-            URL workflow
-            <input
-              disabled={Boolean(busy)}
-              onChange={(event) => setSourceURL(event.target.value)}
-              placeholder="https://"
-              value={sourceURL}
-            />
-          </label>
-          <button disabled={Boolean(busy) || !sourceURL.trim()} type="submit">
-            {busy === "url" ? "Acquiring…" : "Collect / capture"}
-          </button>
-        </form>
-        <div className="intake-actions">
-          <button
-            disabled={Boolean(busy)}
-            onClick={() => void runAction("resolve", () => api.resolve(id))}
-            type="button"
-          >
-            Resolve candidates
-          </button>
-          <button
-            disabled={Boolean(busy)}
-            onClick={() => void runAction("snapshot", () => api.createSnapshot(id, "manual"))}
-            type="button"
-          >
-            Snapshot graph
-          </button>
-          <button
-            disabled={Boolean(busy)}
-            onClick={() => void runAction("report", () => api.generateReport(id))}
-            type="button"
-          >
-            Generate report
-          </button>
-          <button
-            disabled={Boolean(busy)}
-            onClick={() =>
-              void runAction("agent", () =>
-                api.runAgent(id, "query", {query: "resolve locations and accounts"}),
-              )
-            }
-            type="button"
-          >
-            NL agent plan
-          </button>
-        </div>
-        <form
-          className="intake-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!typeName.trim()) return;
-            void runAction("ontology", () =>
-              api.createOntologyType(id, {
-                name: typeName.trim(),
-                description: "Custom investigation type",
-                parent_type: "ENTITY_TYPE_OBJECT",
-              }),
-            );
-            setTypeName("");
-          }}
-        >
-          <label>
-            Custom ontology type
-            <input
-              disabled={Boolean(busy)}
-              onChange={(event) => setTypeName(event.target.value)}
-              placeholder="drone"
-              value={typeName}
-            />
-          </label>
-          <button disabled={Boolean(busy) || !typeName.trim()} type="submit">
-            {busy === "ontology" ? "Registering…" : "Add entity type"}
-          </button>
-          {customTypes.length > 0 && (
-            <small>{customTypes.join(", ")}</small>
-          )}
-        </form>
-      </section>
+  async function rejectFinding(finding: Finding) {
+    if (!snapshot) return;
+    const optimistic = collectDescendants(snapshot.findings, finding.id);
+    setHiddenIds(optimistic);
+    setSelected(null);
+    await run("reject-finding", async () => {
+      try {
+        const response = await command(
+          "finding.reject",
+          {finding_id: finding.id, reason: "That's not me"},
+          () => mirrorApi.rejectFinding(snapshot.session_id, finding.id),
+        );
+        if (response.snapshot) setSnapshot(response.snapshot);
+        else setSnapshot(await mirrorApi.snapshot(snapshot.session_id));
+      } finally {
+        setHiddenIds(new Set());
+      }
+    });
+  }
 
-      {error && <div className="error-banner">{error}</div>}
+  async function planExpansion() {
+    if (!snapshot) return;
+    await run("plan", async () => {
+      await command(
+        "agent.expand",
+        {state: "TX", county: "Travis"},
+        () => mirrorApi.plan(snapshot.session_id),
+      );
+      if (socketState !== "live") {
+        setSnapshot(await mirrorApi.snapshot(snapshot.session_id));
+      }
+    });
+  }
 
-      <section className="metric-strip" aria-label="Investigation totals">
-        <Metric label="Evidence" value={evidence.length} />
-        <Metric label="Observations" value={observations.length} />
-        <Metric label="Relationships" value={relationships.length} />
-        <Metric label="Lineage runs" value={lineageCount} accent />
-      </section>
+  async function changePersona(persona: string) {
+    if (!snapshot) return;
+    await run("persona", async () => {
+      await command(
+        "persona.change",
+        {persona},
+        () => mirrorApi.setPersona(snapshot.session_id, persona),
+      );
+      if (socketState !== "live") {
+        setSnapshot(await mirrorApi.snapshot(snapshot.session_id));
+      }
+      setSimulation(null);
+    });
+  }
 
-      <div className="tab-bar" role="tablist">
-        <button
-          role="tab"
-          aria-selected={tab === "graph"}
-          className={tab === "graph" ? "active" : ""}
-          onClick={() => setTab("graph")}
-        >
-          Graph
-        </button>
-        <button
-          role="tab"
-          aria-selected={tab === "map"}
-          className={tab === "map" ? "active" : ""}
-          onClick={() => setTab("map")}
-        >
-          Map
-        </button>
-        <button
-          role="tab"
-          aria-selected={tab === "timeline"}
-          className={tab === "timeline" ? "active" : ""}
-          onClick={() => setTab("timeline")}
-        >
-          Timeline
-        </button>
-        <button
-          role="tab"
-          aria-selected={tab === "intel"}
-          className={tab === "intel" ? "active" : ""}
-          onClick={() => setTab("intel")}
-        >
-          Intel
-        </button>
-        <button
-          role="tab"
-          aria-selected={tab === "scene"}
-          className={tab === "scene" ? "active" : ""}
-          onClick={() => {
-            setTab("scene");
-            void runAction("scene", async () => {
-              const [sceneData, playbackData] = await Promise.all([
-                api.intelScene(id),
-                api.intelPlayback(id),
-              ]);
-              setScene({nodes: sceneData.nodes || [], edges: sceneData.edges || []});
-              setPlayback(playbackData.frames || []);
-            });
-          }}
-        >
-          3D / Playback
-        </button>
-        <button
-          role="tab"
-          aria-selected={tab === "list"}
-          className={tab === "list" ? "active" : ""}
-          onClick={() => setTab("list")}
-        >
-          List
-        </button>
-      </div>
+  async function simulate() {
+    if (!snapshot || fixedIds.size === 0) return;
+    await run("simulate", async () => {
+      const result = await mirrorApi.simulate(snapshot.session_id, [...fixedIds]);
+      setSimulation(result);
+    });
+  }
 
-      <div className="tab-stage" ref={panelRef}>
-      {tab === "graph" && (
-        <section className="tab-panel graph-panel">
-          {entities.length === 0 ? (
-            <p className="panel-empty">No entities to graph yet.</p>
-          ) : (
-            <GraphView entities={entities} relationships={relationships} />
-          )}
-        </section>
-      )}
+  async function wipe() {
+    if (!snapshot) return;
+    setWipeState({active: true});
+    setSelected(null);
+    setVoiceOpen(false);
+    try {
+      const response = await mirrorApi.wipe(snapshot.session_id);
+      setWipeState({active: true, counts: response.destroyed, complete: true});
+      window.setTimeout(() => {
+        setSnapshot(null);
+        setWipeState({active: false});
+      }, 3000);
+    } catch (reason) {
+      setWipeState({active: false});
+      setError(reason instanceof Error ? reason.message : "Session wipe failed");
+    }
+  }
 
-      {tab === "map" && (
-        <section className="tab-panel map-panel">
-          <MapView observations={observations} />
-        </section>
-      )}
-
-      {tab === "timeline" && (
-        <section className="tab-panel timeline-panel">
-          <TimelineView events={timeline} />
-        </section>
-      )}
-
-      {tab === "intel" && (
-        <section className="tab-panel intel-panel">
-          <div className="intel-actions">
-            {[
-              ["identity/resolve", "Identity resolve"],
-              ["aliases", "Aliases"],
-              ["social-circle", "Social circle"],
-              ["household", "Household"],
-              ["property", "Property records"],
-              ["records/fuse", "Public-record fusion"],
-              ["employment", "Employment graph"],
-              ["location/current", "Current location"],
-              ["location/history", "Location history"],
-              ["location/fuse", "Location fusion"],
-              ["pattern-of-life", "Pattern of life"],
-              ["life-events", "Life events"],
-              ["relationship/strength", "Relationship strength"],
-              ["temporal/diff", "Temporal diff"],
-              ["assets", "Assets"],
-            ].map(([path, label]) => (
-              <button
-                disabled={Boolean(busy)}
-                key={path}
-                onClick={() =>
-                  void runAction(path, async () => {
-                    const result = await api.intel(id, path, {subject: investigation?.name || "subject"});
-                    setIntelLog(JSON.stringify(result, null, 2));
-                  })
-                }
-                type="button"
-              >
-                {label}
-              </button>
-            ))}
-            <button
-              disabled={Boolean(busy)}
-              onClick={() =>
-                void runAction("web-history", async () => {
-                  const result = await api.intel(id, "web-history", {
-                    subject: investigation?.name || "subject",
-                    url: "https://example.com/profile",
-                  });
-                  setIntelLog(JSON.stringify(result, null, 2));
-                })
-              }
-              type="button"
-            >
-              Web history / deleted content
-            </button>
-          </div>
-          <pre className="intel-log" ref={intelLogRef}>
-            {intelLog || "Run a post-MVP intel capability to inspect hypotheses."}
-          </pre>
-        </section>
-      )}
-
-      {tab === "scene" && (
-        <section className="tab-panel scene-panel">
-          <Scene3D edges={scene.edges} nodes={scene.nodes} />
-          <ol className="playback-list">
-            {playback.map((frame) => (
-              <li key={frame.frame}>
-                <strong>Frame {frame.frame}</strong>
-                <span>{frame.narrative}</span>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-
-      {tab === "list" && (
-        <div className="dashboard-grid">
-          <section className="panel evidence-panel">
-            <div className="section-heading">
-              <h2>Evidence register</h2>
-              <span>Immutable source objects</span>
-            </div>
-            {evidence.length === 0 ? (
-              <p className="panel-empty">Upload an image to begin analysis.</p>
-            ) : (
-              <div className="evidence-list">
-                {evidence.map((item) => (
-                  <Link
-                    key={item.id}
-                    to={`/investigations/${id}/evidence/${encodeURIComponent(item.id)}`}
-                    className="evidence-row"
-                  >
-                    <div className="thumb-placeholder">IMG</div>
-                    <div>
-                      <strong>{item.mime_type}</strong>
-                      <code>{shortHash(item.id)}</code>
-                      <small>{formatBytes(item.size_bytes)} · {item.acquisition_method}</small>
-                    </div>
-                    <span>View →</span>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="panel observations-panel">
-            <div className="section-heading">
-              <h2>Extracted observations</h2>
-              <span>Unverified machine output</span>
-            </div>
-            {observations.length === 0 ? (
-              <p className="panel-empty">No observations recorded.</p>
-            ) : (
-              <div className="observation-list">
-                {observations.map((item) => (
-                  <ObservationCard entity={item} key={item.id} />
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="panel relationships-panel">
-            <div className="section-heading">
-              <h2>Candidate relationships</h2>
-              <span>Human verification required</span>
-            </div>
-            {relationships.length === 0 ? (
-              <p className="panel-empty">Run resolve to propose candidates.</p>
-            ) : (
-              <div className="relationship-list">
-                {relationships.map((rel) => (
-                  <article className="relationship-card" key={rel.id}>
-                    <strong>{rel.relationship_type}</strong>
-                    <code>
-                      {shortHash(rel.source_entity_id)} → {shortHash(rel.target_entity_id)}
-                    </code>
-                    <span>{rel.verification_state || "PENDING"}</span>
-                    <div className="verify-actions">
-                      <button
-                        disabled={Boolean(busy)}
-                        onClick={() =>
-                          void runAction("verify", () =>
-                            api.verifyRelationship(id, rel.id, "VERIFICATION_STATE_VERIFIED"),
-                          )
-                        }
-                        type="button"
-                      >
-                        Verify
-                      </button>
-                      <button
-                        disabled={Boolean(busy)}
-                        onClick={() =>
-                          void runAction("verify", () =>
-                            api.verifyRelationship(id, rel.id, "VERIFICATION_STATE_REJECTED"),
-                          )
-                        }
-                        type="button"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
-      )}
-      </div>
-      </div>
-    </Shell>
+  const findings = activeFindings(snapshot);
+  const remediation = useMemo(
+    () =>
+      findings
+        .filter((finding) => finding.type !== "seed_identity")
+        .sort((a, b) => b.severity_score - a.severity_score)
+        .slice(0, 6),
+    [findings],
   );
-}
+  const refusedIds = new Set(simulation?.refused || []);
+  const score = snapshot?.score;
 
-function EvidencePage({
-  investigationId,
-  evidenceId,
-}: {
-  investigationId: string;
-  evidenceId: string;
-}) {
-  const [evidence, setEvidence] = useState<Evidence>();
-  const [observations, setObservations] = useState<Entity[]>([]);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    Promise.all([
-      api.getEvidence(investigationId, evidenceId),
-      api.listObservations(investigationId, evidenceId),
-    ])
-      .then(([evidenceData, observationData]) => {
-        setEvidence(evidenceData);
-        setObservations(observationData);
-      })
-      .catch((reason: Error) => setError(reason.message));
-  }, [evidenceId, investigationId]);
-
-  return (
-    <Shell>
-      <div className="evidence-header">
-        <Link className="back-link" to={`/investigations/${investigationId}`}>
-          ← Investigation
-        </Link>
-        <p className="eyebrow">Evidence viewer</p>
-        <h1>{shortHash(evidenceId)}</h1>
-        <code>{evidenceId}</code>
-      </div>
-      {error && <div className="error-banner">{error}</div>}
-      <div className="viewer-grid">
-        <section className="image-stage">
-          {evidence?.download_url ? (
-            <img alt="Uploaded evidence" src={evidence.download_url} />
-          ) : (
-            <span>Retrieving evidence…</span>
-          )}
-        </section>
-        <aside className="metadata-panel">
-          <p className="eyebrow">Source record</p>
-          <dl>
-            <Metadata label="MIME" value={evidence?.mime_type} />
-            <Metadata label="Size" value={evidence && formatBytes(evidence.size_bytes)} />
-            <Metadata label="Acquired" value={evidence && formatDate(evidence.acquired_at)} />
-            <Metadata label="Method" value={evidence?.acquisition_method} />
-            {Object.entries(evidence?.metadata || {}).map(([key, value]) => (
-              <Metadata key={key} label={key.replaceAll("_", " ")} value={value} />
-            ))}
-          </dl>
-        </aside>
-      </div>
-      <section className="panel linked-observations">
-        <div className="section-heading">
-          <h2>Observations from this evidence</h2>
-          <span>{observations.length} linked records</span>
-        </div>
-        <div className="observation-list">
-          {observations.map((item) => (
-            <ObservationCard entity={item} key={item.id} />
-          ))}
-        </div>
-      </section>
-    </Shell>
-  );
-}
-
-function Metric({
-  label,
-  value,
-  accent = false,
-}: {
-  label: string;
-  value: number;
-  accent?: boolean;
-}) {
-  const valueRef = useRef<HTMLElement | null>(null);
-  useCountUp(valueRef, value);
-  return (
-    <div className={accent ? "metric accent" : "metric"}>
-      <span>{label}</span>
-      <strong ref={(node) => { valueRef.current = node; }}>
-        {value.toString().padStart(2, "0")}
-      </strong>
-    </div>
-  );
-}
-
-function ObservationCard({entity}: {entity: Entity}) {
-  const type = entity.attributes.observation_type?.replace("OBSERVATION_TYPE_", "") || "UNKNOWN";
-  return (
-    <article className="observation-card">
-      <div>
-        <span className={`type-tag type-${type.toLowerCase()}`}>{type}</span>
-        <strong>{entity.attributes.label || "Unlabelled observation"}</strong>
-      </div>
-      <span className="confidence">
-        {Math.round(Number(entity.attributes.detector_confidence || 0) * 100)}%
-      </span>
-      <code>{shortHash(entity.id)}</code>
-    </article>
-  );
-}
-
-function Metadata({label, value}: {label: string; value?: string}) {
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd>{value || "—"}</dd>
-    </div>
-  );
-}
-
-function shortHash(value: string) {
-  const clean = value.replace("sha256:", "");
-  return clean.length > 18 ? `${clean.slice(0, 10)}…${clean.slice(-6)}` : clean;
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
-function formatBytes(value: number) {
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-export default function App() {
-  const [path, setPath] = useState(window.location.pathname);
-  useEffect(() => {
-    const update = () => setPath(window.location.pathname);
-    window.addEventListener("popstate", update);
-    return () => window.removeEventListener("popstate", update);
-  }, []);
-
-  const evidenceMatch = path.match(/^\/investigations\/([^/]+)\/evidence\/(.+)$/);
-  if (evidenceMatch) {
+  if (loading) {
     return (
-      <EvidencePage
-        investigationId={decodeURIComponent(evidenceMatch[1])}
-        evidenceId={decodeURIComponent(evidenceMatch[2])}
-      />
+      <div className="boot-screen">
+        <div className="boot-mark">M</div>
+        <p>Establishing an ephemeral Mirror session…</p>
+        <span />
+      </div>
     );
   }
-  const investigationMatch = path.match(/^\/investigations\/([^/]+)$/);
-  if (investigationMatch) {
-    return <InvestigationPage id={decodeURIComponent(investigationMatch[1])} />;
+
+  if (!snapshot || !score) {
+    return (
+      <div className="service-error">
+        <span>DDU / MIRROR</span>
+        <h1>The experience is built. The intelligence service is not running.</h1>
+        <p>{error}</p>
+        <code>python services/ddu-mirror-intel/app.py</code>
+        <button onClick={() => void startDemo()} type="button">
+          Retry connection
+        </button>
+      </div>
+    );
   }
-  return <HomePage />;
+
+  return (
+    <div className={`mirror-app ${wipeState.active ? "is-wiping" : ""}`}>
+      <header className="mirror-header">
+        <div className="mirror-brand">
+          <span>M</span>
+          <div>
+            <strong>DDU / MIRROR</strong>
+            <small>Start with yourself. See what they’d see.</small>
+          </div>
+        </div>
+        <div className="session-posture">
+          <span className={`live-dot ${socketState}`} />
+          <div>
+            <strong>{socketState === "live" ? "LIVE GRAPH" : "REST FALLBACK"}</strong>
+            <small>Ephemeral · auto-destroy on exit</small>
+          </div>
+          <button onClick={() => void wipe()} type="button">
+            End & wipe
+          </button>
+        </div>
+      </header>
+
+      <main className="mirror-main">
+        <section className="risk-headline">
+          <div className="score-ring">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <circle cx="60" cy="60" r="52" />
+              <circle
+                className={`score-arc band-${score.band}`}
+                cx="60"
+                cy="60"
+                r="52"
+                style={{strokeDashoffset: 327 - (327 * score.score) / 100}}
+              />
+            </svg>
+            <div>
+              <strong>{score.score}</strong>
+              <span>/100</span>
+            </div>
+          </div>
+          <div className="risk-copy">
+            <p className="eyebrow">Your exposure score</p>
+            <h1>
+              {score.band === "critical" || score.band === "severe"
+                ? "Your public footprint can be chained into an attack."
+                : "Your exposure is visible — and partly fixable."}
+            </h1>
+            <p>
+              {score.contributing_findings} live findings ·{" "}
+              {Math.round(score.irreversible_share * 100)}% of weighted risk is
+              irreversible
+            </p>
+          </div>
+          <div className="before-after">
+            <span>NOW</span>
+            <strong>{score.score}</strong>
+            <i>→</i>
+            <span>AFTER FIXES</span>
+            <strong>{simulation?.score_projected.score ?? "—"}</strong>
+          </div>
+        </section>
+
+        <section className="workspace">
+          <div className="canvas-column">
+            <div className="workspace-toolbar">
+              <div className="view-switch" role="tablist">
+                <button
+                  aria-selected={view === "scene"}
+                  className={view === "scene" ? "active" : ""}
+                  onClick={() => setView("scene")}
+                  role="tab"
+                >
+                  3D exposure
+                </button>
+                <button
+                  aria-selected={view === "map"}
+                  className={view === "map" ? "active" : ""}
+                  onClick={() => setView("map")}
+                  role="tab"
+                >
+                  Map
+                </button>
+              </div>
+              <div className="persona-control">
+                <label htmlFor="persona">Threat model</label>
+                <select
+                  disabled={Boolean(busy)}
+                  id="persona"
+                  onChange={(event) => void changePersona(event.target.value)}
+                  value={snapshot.persona}
+                >
+                  {PERSONAS.map((persona) => (
+                    <option key={persona.id} value={persona.id}>
+                      {persona.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button className="voice-launch" onClick={() => setVoiceOpen(true)}>
+                <span>◉</span> Ask Mirror
+              </button>
+            </div>
+            {view === "scene" ? (
+              <Scene3D
+                attackPaths={snapshot.attack_paths}
+                findings={snapshot.findings}
+                hiddenIds={hiddenIds}
+                onSelect={setSelected}
+                refusedIds={refusedIds}
+                remediatedIds={fixedIds}
+                selectedId={selected?.id}
+              />
+            ) : (
+              <MirrorMap findings={snapshot.findings} onSelect={setSelected} />
+            )}
+            <div className="canvas-caption">
+              <span>Height + glow = severity</span>
+              <span>Z = hop depth from verified seed</span>
+              <span>Pink edges = active attack path</span>
+            </div>
+          </div>
+
+          <aside className="control-rail">
+            <section className="rail-section approval-queue">
+              <div className="rail-title">
+                <div>
+                  <p className="eyebrow">Human checkpoint</p>
+                  <h2>Agent proposals</h2>
+                </div>
+                <span>{snapshot.pending_proposals.length}</span>
+              </div>
+              {snapshot.pending_proposals.length === 0 ? (
+                <div className="rail-empty">
+                  <p>No expansion can run without you.</p>
+                  <button disabled={Boolean(busy)} onClick={() => void planExpansion()}>
+                    Expand one hop
+                  </button>
+                </div>
+              ) : (
+                <div className="proposal-list">
+                  {snapshot.pending_proposals.map((proposal) => (
+                    <article className="proposal-card" key={proposal.id}>
+                      <div>
+                        <span>HOP {proposal.hop_depth}</span>
+                        <span>
+                          {proposal.touches_external.length ? "EXTERNAL" : "LOCAL ONLY"}
+                        </span>
+                      </div>
+                      <h3>{proposal.title}</h3>
+                      <p>{proposal.rationale}</p>
+                      <small>{proposal.expected_findings}</small>
+                      <div className="proposal-actions">
+                        <button
+                          className="approve"
+                          disabled={Boolean(busy)}
+                          onClick={() => void decideProposal(proposal, "approve")}
+                        >
+                          {busy === `approve:${proposal.id}` ? "Running…" : "Approve"}
+                        </button>
+                        <button
+                          disabled={Boolean(busy)}
+                          onClick={() => void decideProposal(proposal, "reject")}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="rail-section remediation-sim">
+              <div className="rail-title">
+                <div>
+                  <p className="eyebrow">What-if control</p>
+                  <h2>Remediation sim</h2>
+                </div>
+                <span>{fixedIds.size}</span>
+              </div>
+              <div className="remediation-list">
+                {remediation.map((finding) => (
+                  <label
+                    className={`${fixedIds.has(finding.id) ? "selected" : ""} ${
+                      refusedIds.has(finding.id) ? "refused" : ""
+                    }`}
+                    key={finding.id}
+                  >
+                    <input
+                      checked={fixedIds.has(finding.id)}
+                      onChange={() => {
+                        setFixedIds((current) => {
+                          const next = new Set(current);
+                          if (next.has(finding.id)) next.delete(finding.id);
+                          else next.add(finding.id);
+                          return next;
+                        });
+                        setSimulation(null);
+                      }}
+                      type="checkbox"
+                    />
+                    <span className={`severity-dot severity-${finding.severity}`} />
+                    <span>
+                      <strong>{finding.label}</strong>
+                      <small>
+                        {finding.reversible ? finding.remediation.effort : "irreversible"}
+                      </small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <button
+                className="simulate-button"
+                disabled={fixedIds.size === 0 || Boolean(busy)}
+                onClick={() => void simulate()}
+              >
+                {busy === "simulate" ? "Simulating…" : "Simulate selected fixes"}
+              </button>
+              {simulation && (
+                <div className="simulation-result">
+                  <strong>
+                    {simulation.score_now.score} → {simulation.score_projected.score}
+                  </strong>
+                  <span>
+                    {simulation.refused.length
+                      ? `${simulation.refused.length} permanent exposure${
+                          simulation.refused.length > 1 ? "s" : ""
+                        } refused to go dark.`
+                      : "Every selected path breaks."}
+                  </span>
+                </div>
+              )}
+            </section>
+          </aside>
+        </section>
+
+        <section className="lower-deck">
+          <div className="attack-paths">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Chained risk</p>
+                <h2>Attack paths</h2>
+              </div>
+              <span>{snapshot.attack_paths.length} active</span>
+            </div>
+            {snapshot.attack_paths.length === 0 ? (
+              <p className="empty-copy">Rejected or remediated links have broken every path.</p>
+            ) : (
+              snapshot.attack_paths.slice(0, 3).map((path, index) => (
+                <article key={path.id}>
+                  <span>0{index + 1}</span>
+                  <div>
+                    <strong>{path.narrative}</strong>
+                    <small>{path.terminal_impact}</small>
+                  </div>
+                  <meter max={1} min={0} value={path.feasibility} />
+                </article>
+              ))
+            )}
+          </div>
+          <div className="activity-stream">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Evidence trail</p>
+                <h2>Live decisions</h2>
+              </div>
+              <span>APPEND ONLY</span>
+            </div>
+            <ol>
+              {snapshot.action_log_tail
+                .slice(-5)
+                .reverse()
+                .map((entry) => (
+                  <li key={entry.seq}>
+                    <time>{new Date(entry.at).toLocaleTimeString([], {timeStyle: "short"})}</time>
+                    <span className={`actor-${entry.actor}`}>{entry.actor}</span>
+                    <p>{entry.detail}</p>
+                  </li>
+                ))}
+            </ol>
+          </div>
+        </section>
+        {error && <div className="toast-error">{error}</div>}
+      </main>
+
+      <EvidenceDrawer
+        attribution={snapshot.attribution}
+        finding={selected}
+        onClose={() => setSelected(null)}
+        onReject={(finding) => void rejectFinding(finding)}
+        rejecting={busy === "reject-finding"}
+        score={score}
+        sessionId={snapshot.session_id}
+      />
+      {voiceOpen && (
+        <VoicePanel onClose={() => setVoiceOpen(false)} sessionId={snapshot.session_id} />
+      )}
+      {wipeState.active && (
+        <div className={`wipe-overlay ${wipeState.complete ? "complete" : ""}`}>
+          <div className="wipe-grid" />
+          <div className="wipe-message">
+            <span className="wipe-icon">{wipeState.complete ? "✓" : "×"}</span>
+            <p className="eyebrow">Ephemeral session</p>
+            <h2>{wipeState.complete ? "Nothing remains." : "Destroying the graph…"}</h2>
+            {wipeState.counts && (
+              <p>
+                {wipeState.counts.findings || 0} findings ·{" "}
+                {wipeState.counts.vault_entries || 0} raw values ·{" "}
+                {wipeState.counts.attack_paths || 0} attack paths destroyed
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

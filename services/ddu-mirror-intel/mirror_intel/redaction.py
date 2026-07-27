@@ -45,7 +45,7 @@ _TOKEN_SECRET = os.environ.get("MIRROR_REVEAL_SECRET", "").encode() or secrets.t
 # patterns get a chance to shred it.
 
 _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("EMAIL", re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]{2,}")),
+    ("EMAIL", re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")),
     ("URL", re.compile(r"https?://[^\s<>\"]+")),
     (
         "COORD",

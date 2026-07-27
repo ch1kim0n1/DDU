@@ -14,6 +14,7 @@ import logging
 import os
 
 import uvicorn
+from fastapi.middleware.cors import CORSMiddleware
 
 from ddu_common.app import build_scaffold_app
 from ddu_common.version import ServiceVersion, from_env
@@ -39,6 +40,16 @@ VERSION = from_env(
 PORT = int(os.environ.get("MIRROR_INTEL_PORT", "8120"))
 
 app = build_scaffold_app(VERSION)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=os.environ.get(
+        "MIRROR_UI_ORIGIN_REGEX",
+        r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    ),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
 app.include_router(router)
 
 
