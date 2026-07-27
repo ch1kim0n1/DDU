@@ -83,7 +83,7 @@ def test_narration_stops_reading_rejected_nodes() -> None:
 def test_websocket_interrupt_resume_materializes_findings() -> None:
     client = _client()
     before = _create(client, "s_d_ws", seeded=False)
-    assert before["findings"] == []
+    assert [finding["id"] for finding in before["findings"]] == ["f_seed"]
 
     with client.websocket_connect("/intel/ws/s_d_ws") as websocket:
         initial = websocket.receive_json()
@@ -105,6 +105,6 @@ def test_websocket_interrupt_resume_materializes_findings() -> None:
         )
         approved = websocket.receive_json()
         assert approved["event"] == "finding.new"
-        assert len(approved["snapshot"]["findings"]) > 0
+        assert len(approved["snapshot"]["findings"]) > 1
 
     store.drop("s_d_ws")

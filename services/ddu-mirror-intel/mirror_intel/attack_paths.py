@@ -140,9 +140,15 @@ def build_attack_paths(findings: Iterable[Finding]) -> list[AttackPath]:
                 continue
             if (source.type, target.type) not in PIVOTS:
                 continue
-            # Only pivot forward — an attacker's depth from the seed never
-            # decreases, and allowing it would let us build cycles.
-            if target.hop_depth <= source.hop_depth:
+            # Never pivot *backwards* toward the seed — that would invert the
+            # direction of the attack. Same-depth pivots ARE allowed, and that
+            # matters more than it looks: real discovery workers all emit at
+            # depth 1 (they each expand the seed independently), so requiring
+            # a strictly increasing depth meant real scans produced zero paths
+            # while the mock hierarchy produced eight. PIVOTS is a DAG over
+            # finding types and `walk` carries a seen-set, so equal depth
+            # cannot introduce a cycle.
+            if target.hop_depth < source.hop_depth:
                 continue
             children[source.id].append(target)
 

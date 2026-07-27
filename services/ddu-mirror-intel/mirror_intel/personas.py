@@ -147,6 +147,25 @@ def weight_for(persona: str, finding_type: FindingType) -> float:
     return table[finding_type]
 
 
+#: Shorthand Engineer A's matrix uses for finding types, mapped to the
+#: contract's canonical names. Without this, A's ``"object"`` key is silently
+#: dropped and object-exposure findings score persona-neutral — which was
+#: masked at integration time only because A's intended value happened to
+#: match this module's default. A tuning pass on their side would have
+#: silently stopped reaching the scoring engine.
+KEY_ALIASES: dict[str, str] = {
+    "object": FindingType.OBJECT_EXPOSURE.value,
+    "gps": FindingType.GPS_EXPOSURE.value,
+    "face": FindingType.FACE_LINK.value,
+    "handle": FindingType.HANDLE_LINK.value,
+    "employer": FindingType.EMPLOYER_LINK.value,
+    "device": FindingType.DEVICE_FINGERPRINT.value,
+    "location": FindingType.LOCATION_INFERENCE.value,
+    "records": FindingType.RECORD_CLASS.value,
+    "seed": FindingType.SEED_IDENTITY.value,
+}
+
+
 def load_persona_weights(path: str | None = None) -> None:
     """Overlay Engineer A's persona matrix onto the defaults.
 
@@ -168,8 +187,9 @@ def load_persona_weights(path: str | None = None) -> None:
     for persona_key, table in incoming.items():
         target = PERSONA_WEIGHTS.setdefault(persona_key, {})
         for type_key, multiplier in table.items():
+            canonical = KEY_ALIASES.get(type_key, type_key)
             try:
-                target[FindingType(type_key)] = float(multiplier)
+                target[FindingType(canonical)] = float(multiplier)
                 applied += 1
             except (ValueError, TypeError):
                 log.warning("ignoring unknown finding type %r in persona %s", type_key, persona_key)

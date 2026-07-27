@@ -20,6 +20,36 @@
   --mono: "DM Mono", "SFMono-Regular", Consolas, monospace;
 }
 
+.mirror-onboarding {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 72px 24px;
+}
+
+.mirror-card {
+  display: grid;
+  gap: 16px;
+  margin-top: 28px;
+  padding: 28px;
+  border: 1px solid var(--line, #26313c);
+  border-radius: 14px;
+  background: var(--panel, #121920);
+}
+
+.mirror-card fieldset { border: 0; margin: 0; padding: 0; }
+.mirror-card legend { margin-bottom: 12px; font-weight: 700; }
+.mirror-card input, .mirror-card textarea { width: 100%; }
+.persona-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.persona { padding: 12px; border: 1px solid var(--line, #26313c); border-radius: 8px; cursor: pointer; }
+.persona.selected { border-color: var(--accent, #9ad1ff); background: rgba(95, 174, 255, .1); }
+.persona input { width: auto; margin-right: 8px; }
+.adult-check { display: flex; gap: 9px; align-items: center; }
+.adult-check input { width: auto; }
+.mirror-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.mirror-card button.secondary { background: transparent; border: 1px solid var(--line, #526271); }
+
+@media (max-width: 600px) { .persona-grid { grid-template-columns: 1fr; } }
+
 * {
   box-sizing: border-box;
 }

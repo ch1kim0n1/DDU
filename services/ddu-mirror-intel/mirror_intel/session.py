@@ -37,15 +37,64 @@ from .personas import DEFAULT_PERSONA
 from .redaction import verify_reveal_token
 from .schema import (
     AttackPath,
+    Effort,
     Finding,
+    FindingType,
+    Origin,
     PlatformAttribution,
     Proposal,
+    Remediation,
     ScoreBreakdown,
     SessionSnapshot,
+    VerificationState,
 )
 from .scoring import apply_persona, compute_score, simulate_remediation
 
 log = logging.getLogger("mirror-intel.session")
+
+#: Stable id for the depth-0 node. Discovery findings parent to it, which is
+#: what gives attack paths a root to start from.
+SEED_FINDING_ID = "f_seed"
+
+
+def seed_finding(identity: VerifiedIdentity) -> Finding:
+    """The verified identity itself, as a depth-0 node.
+
+    Without this the graph is a flat spray of unparented findings and no
+    attack path can form — every worker expands the seed independently, so
+    they all land at depth 1 with nothing above them. This node is the "one
+    clue" the whole product narrative starts from, and it is what makes
+    "here is how far an attacker gets from one clue" literally true on the
+    Z axis rather than just a caption.
+
+    It contributes almost nothing to the score (severity_base 0.1, and every
+    persona weights it ~0.2) because knowing your own verified email is not
+    an exposure — it is the starting point.
+    """
+    return Finding(
+        id=SEED_FINDING_ID,
+        parent_id=None,
+        hop_depth=0,
+        type=FindingType.SEED_IDENTITY,
+        label="Verified seed identity",
+        detail=(
+            "The identity you proved control of. Everything below is reachable "
+            "from here — this is the single clue an attacker starts with."
+        ),
+        verification_state=VerificationState.CONFIRMED,
+        confidence=1.0,
+        severity_base=0.1,
+        reversible=True,
+        remediation=Remediation(
+            action="Nothing to remediate — this is the identity you verified.",
+            effort=Effort.LOW,
+        ),
+        platform=None,
+        source="identity_gate:verified",
+        method="operator verification (email code or OAuth)",
+        subject_ref=identity.subject_ref,
+        origin=Origin.SYSTEM,
+    )
 
 
 @dataclass
@@ -74,6 +123,8 @@ class Session:
     def __post_init__(self) -> None:
         self.log = ActionLog(self.session_id)
         self._lock = threading.RLock()
+        if not any(f.id == SEED_FINDING_ID for f in self.findings):
+            self.findings.insert(0, seed_finding(self.identity))
         self._recompute()
 
     # ── derived state ────────────────────────────────────────────────────

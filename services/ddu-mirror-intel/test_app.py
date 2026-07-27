@@ -96,6 +96,31 @@ def test_empty_verified_set_refuses_everything():
         assert_self(empty, "anything@example.com")
 
 
+# ── Persona matrix handoff (Engineer A → B) ──────────────────────────────
+
+
+def test_engineer_a_persona_matrix_loads_without_dropping_keys(tmp_path):
+    """The A→B handoff must not silently drop weights.
+
+    A's matrix uses shorthand type keys ("object") where the contract uses
+    canonical ones ("object_exposure"). Dropping them scored those findings
+    persona-neutral, which integration testing missed only because A's
+    intended value coincided with this module's default.
+    """
+    import json
+
+    from mirror_intel.personas import PERSONA_WEIGHTS, load_persona_weights
+
+    matrix = {"stalker": {"object": 1.75, "gps": 1.95, "breach": 0.71}}
+    path = tmp_path / "weights.json"
+    path.write_text(json.dumps(matrix))
+
+    load_persona_weights(str(path))
+    assert PERSONA_WEIGHTS["stalker"][FindingType.OBJECT_EXPOSURE] == 1.75
+    assert PERSONA_WEIGHTS["stalker"][FindingType.GPS_EXPOSURE] == 1.95
+    assert PERSONA_WEIGHTS["stalker"][FindingType.BREACH] == 0.71
+
+
 # ── Design rule 2: no third-party traversal ──────────────────────────────
 
 
@@ -351,6 +376,54 @@ def test_path_feasibility_is_the_weakest_link(findings):
         assert path.feasibility <= min(hops) + 1e-6
 
 
+def test_real_discovery_output_produces_attack_paths(client):
+    """Regression: the mock hierarchy produced 8 paths while a real scan produced 0.
+
+    Every discovery worker expands the seed independently, so all their output
+    lands at hop_depth 1. The path builder previously required a strictly
+    increasing depth to pivot, which meant real findings could never chain —
+    and the mock generator's hand-built parent tree hid it completely. If this
+    fails, the headline "attack path" feature is dead on real data again.
+    """
+    client.post(
+        "/intel/session",
+        json={
+            "session_id": "s_paths",
+            "emails": ["demo@ddu-mirror.local"],
+            "handles": ["demo_operator"],
+        },
+    )
+    planned = client.post(
+        "/intel/scan/plan", json={"session_id": "s_paths", "state": "TX"}
+    ).json()
+
+    for step in ("discovery.breaches", "discovery.accounts", "advisor.records"):
+        proposal = next((p for p in planned["proposals"] if p["step"] == step), None)
+        if proposal:
+            client.post(
+                "/intel/scan/approve",
+                json={"session_id": "s_paths", "proposal_id": proposal["id"]},
+            )
+
+    snapshot = client.get("/intel/session/s_paths").json()
+    assert len(snapshot["findings"]) > 3
+    assert snapshot["attack_paths"], "real discovery output produced no attack paths"
+    # Every path must start at the verified seed — that is what makes the Z
+    # axis mean "distance an attacker travelled from one clue".
+    for path in snapshot["attack_paths"]:
+        assert path["finding_ids"][0] == "f_seed"
+        assert path["narrative"]
+
+
+def test_session_starts_with_a_seed_node(client):
+    client.post("/intel/session", json={"session_id": "s_seed", "handles": ["demo_operator"]})
+    findings = client.get("/intel/session/s_seed").json()["findings"]
+    seed = next(f for f in findings if f["id"] == "f_seed")
+    assert seed["hop_depth"] == 0
+    assert seed["parent_id"] is None
+    assert seed["type"] == "seed_identity"
+
+
 def test_paths_exclude_rejected_findings(findings):
     pruned = reject(findings, "f_mock_linkedin").findings
     for path in build_attack_paths(pruned):
@@ -534,8 +607,10 @@ def test_full_human_in_the_loop_cycle(client):
     assert planned["event"] == "agent.awaiting_approval"
     assert planned["proposals"]
 
-    # Nothing has run yet.
-    assert client.get("/intel/session/s_hitl").json()["findings"] == []
+    # Nothing has run yet — the only node is the depth-0 seed the session was
+    # created with, which is the verified identity itself, not a discovery result.
+    pre = client.get("/intel/session/s_hitl").json()["findings"]
+    assert [f["id"] for f in pre] == ["f_seed"]
 
     breaches = next(p for p in planned["proposals"] if p["step"] == "discovery.breaches")
     approved = client.post(

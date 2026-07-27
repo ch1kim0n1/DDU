@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools==80.9.0", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ddu-mirror"
+version = "0.1.0"
+description = "DDU Mirror trust spine: verified control, consent, and ephemeral sessions"
+requires-python = ">=3.11"
+dependencies = [
+    "cryptography==44.0.2",
+    "ddu-py-common==0.0.1",
+    "fastapi==0.136.3",
+    "pydantic==2.13.4",
+    "redis==5.2.1",
+    "uvicorn[standard]==0.44.0",
+]
+
+[tool.setuptools]
+py-modules = ["app"]
+
+[tool.setuptools.packages.find]
+include = ["mirror_platform*"]
