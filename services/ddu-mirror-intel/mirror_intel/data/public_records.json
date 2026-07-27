@@ -1,0 +1,299 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "compiled": "2026-07-27",
+    "scope": "United States, state level",
+    "what_this_is": "A curated map of which record classes are public by default in each jurisdiction, what each one discloses, and the documented suppression path. Compiled by hand before the build.",
+    "what_this_is_not": "This performs NO lookups, NO scraping, and NO record retrieval. It tells you that a class of record about you is public and how to suppress it. It never fetches the record.",
+    "disclaimer": "General information, not legal advice. Statutes and county procedures change; verify with your county clerk or assessor before relying on a suppression path."
+  },
+
+  "record_classes": {
+    "property_deed": {
+      "label": "Property deeds and assessor records",
+      "discloses": "Your full name tied to a street address, purchase date, purchase price, and often a parcel map showing the lot.",
+      "severity_base": 0.85,
+      "why_it_matters": "This is the single most direct name-to-home-address link in public data, and it is indexed and resold by dozens of brokers.",
+      "reversible": false
+    },
+    "voter_registration": {
+      "label": "Voter registration roll",
+      "discloses": "Name, residential address, party affiliation in some states, year of birth, and voting history (that you voted, not how).",
+      "severity_base": 0.8,
+      "why_it_matters": "Voter files are sold in bulk to campaigns and resold onward, which is how a home address ends up on a people-search site.",
+      "reversible": false
+    },
+    "business_filing": {
+      "label": "Business registrations and UCC filings",
+      "discloses": "Registered agent name and address — which for a sole proprietor or small LLC is usually a home address.",
+      "severity_base": 0.7,
+      "why_it_matters": "Founders routinely register an LLC to their home address without realising the filing is fully public and searchable by name.",
+      "reversible": true
+    },
+    "court_record": {
+      "label": "Court records and dockets",
+      "discloses": "Name, case type, filing dates, and frequently an address of record. Family and small-claims filings are often the most sensitive.",
+      "severity_base": 0.75,
+      "why_it_matters": "Court records are aggregated by commercial services and surface in background checks and search results indefinitely.",
+      "reversible": false
+    },
+    "professional_license": {
+      "label": "Professional and occupational licenses",
+      "discloses": "Name, license number, license status, and the address of record — which is a home address unless a business address was supplied.",
+      "severity_base": 0.55,
+      "why_it_matters": "License lookup portals are designed for public verification, so they are trivially searchable by full name.",
+      "reversible": true
+    },
+    "marriage_divorce": {
+      "label": "Marriage and divorce records",
+      "discloses": "Both parties' full legal names, prior names, dates, and county of residence.",
+      "severity_base": 0.6,
+      "why_it_matters": "Prior-name disclosure defeats a name change used for separation from a past relationship.",
+      "reversible": false
+    },
+    "dmv_record": {
+      "label": "Motor vehicle records",
+      "discloses": "Name and address tied to a vehicle and plate.",
+      "severity_base": 0.7,
+      "why_it_matters": "Federally restricted, but the permissible-purpose list is broad enough that private investigators and insurers routinely obtain them.",
+      "reversible": false,
+      "federal_note": "The Driver's Privacy Protection Act (18 U.S.C. §2721) restricts disclosure, but enumerates permissible purposes that many commercial requesters qualify for."
+    }
+  },
+
+  "jurisdictions": {
+    "_default": {
+      "label": "United States (general)",
+      "public_by_default": [
+        "property_deed",
+        "voter_registration",
+        "business_filing",
+        "court_record",
+        "professional_license",
+        "marriage_divorce"
+      ],
+      "suppression_paths": [
+        {
+          "applies_to": ["property_deed", "voter_registration"],
+          "path": "Most states run an address-confidentiality program for survivors of domestic violence, stalking, sexual assault, or trafficking, and many also cover judges, prosecutors, and law enforcement. Enrolment substitutes a state-provided proxy address across public records.",
+          "effort": "high",
+          "eligibility": "restricted"
+        },
+        {
+          "applies_to": ["business_filing"],
+          "path": "Use a registered-agent service or a commercial mail address instead of your home address, then file an amendment to update the existing registration.",
+          "effort": "medium",
+          "eligibility": "anyone"
+        },
+        {
+          "applies_to": ["professional_license"],
+          "path": "Most licensing boards let you nominate a business address of record. Change it in the board's portal.",
+          "effort": "low",
+          "eligibility": "anyone"
+        },
+        {
+          "applies_to": ["property_deed", "voter_registration", "court_record", "marriage_divorce"],
+          "path": "The underlying records stay public, but the data brokers that aggregate and resell them all operate opt-out processes. Working the major-broker opt-out list is the highest-leverage action available to everyone.",
+          "effort": "high",
+          "eligibility": "anyone"
+        }
+      ]
+    },
+
+    "TX": {
+      "label": "Texas",
+      "public_by_default": [
+        "property_deed",
+        "voter_registration",
+        "business_filing",
+        "court_record",
+        "professional_license",
+        "marriage_divorce"
+      ],
+      "notes": "County appraisal district sites are individually searchable by owner name and are among the most accessible property records in the country.",
+      "suppression_paths": [
+        {
+          "applies_to": ["property_deed"],
+          "path": "Texas Tax Code §25.025 lets qualifying individuals — including peace officers, judges, and victims of family violence — request that their address be withheld from public appraisal-district records. File with your county appraisal district.",
+          "effort": "medium",
+          "eligibility": "restricted",
+          "citation": "Tex. Tax Code §25.025"
+        },
+        {
+          "applies_to": ["voter_registration", "property_deed"],
+          "path": "The Texas Attorney General's Address Confidentiality Program provides a substitute address for survivors of family violence, sexual assault, stalking, or trafficking.",
+          "effort": "high",
+          "eligibility": "restricted"
+        },
+        {
+          "applies_to": ["business_filing"],
+          "path": "Texas Secretary of State filings are public. Use a registered-agent service and file a Statement of Change of Registered Office (Form 401).",
+          "effort": "medium",
+          "eligibility": "anyone"
+        }
+      ],
+      "biometric_note": "Texas CUBI (Bus. & Com. Code §503.001) requires informed consent before capturing a biometric identifier and mandates destruction within a reasonable time. This is why DDU Mirror puts face consent on its own screen with a visible destruction countdown."
+    },
+
+    "WA": {
+      "label": "Washington",
+      "public_by_default": [
+        "property_deed",
+        "voter_registration",
+        "business_filing",
+        "court_record",
+        "professional_license",
+        "marriage_divorce"
+      ],
+      "notes": "County assessor parcel search is public and name-searchable. Voter registration data is available to the public with some restrictions on commercial use.",
+      "suppression_paths": [
+        {
+          "applies_to": ["voter_registration", "property_deed"],
+          "path": "Washington's Address Confidentiality Program (RCW 40.24), run by the Secretary of State, provides a substitute address for survivors of domestic violence, sexual assault, trafficking, and stalking, and for criminal-justice participants.",
+          "effort": "high",
+          "eligibility": "restricted",
+          "citation": "RCW 40.24"
+        },
+        {
+          "applies_to": ["voter_registration"],
+          "path": "RCW 29A.08.720 restricts commercial use of voter registration data and allows confidential status for ACP participants.",
+          "effort": "medium",
+          "eligibility": "restricted"
+        },
+        {
+          "applies_to": ["business_filing"],
+          "path": "Use a registered-agent service and amend the filing through the Washington Secretary of State's Corporations portal.",
+          "effort": "medium",
+          "eligibility": "anyone"
+        }
+      ],
+      "privacy_note": "Washington's My Health My Data Act sets a high bar for consumer health data specifically, and signals the state's general direction on consent-first data handling."
+    },
+
+    "CA": {
+      "label": "California",
+      "public_by_default": [
+        "property_deed",
+        "voter_registration",
+        "business_filing",
+        "court_record",
+        "professional_license",
+        "marriage_divorce"
+      ],
+      "notes": "California voter files are NOT generally public — access is restricted to election, scholarly, journalistic, and political purposes under Elections Code §2194.",
+      "suppression_paths": [
+        {
+          "applies_to": ["property_deed", "voter_registration"],
+          "path": "California's Safe at Home program (Gov. Code §6205 et seq.) provides a substitute address for survivors of abuse, stalking, trafficking, and for reproductive healthcare workers.",
+          "effort": "high",
+          "eligibility": "restricted",
+          "citation": "Cal. Gov. Code §6205"
+        },
+        {
+          "applies_to": ["property_deed", "voter_registration", "court_record"],
+          "path": "The CCPA/CPRA gives California residents a right to deletion that data brokers must honour, and the DELETE Act (SB 362) requires registered brokers to process deletion requests through a single state mechanism.",
+          "effort": "medium",
+          "eligibility": "anyone",
+          "citation": "Cal. Civ. Code §1798.105; SB 362"
+        }
+      ]
+    },
+
+    "IL": {
+      "label": "Illinois",
+      "public_by_default": [
+        "property_deed",
+        "voter_registration",
+        "business_filing",
+        "court_record",
+        "professional_license",
+        "marriage_divorce"
+      ],
+      "suppression_paths": [
+        {
+          "applies_to": ["property_deed", "voter_registration"],
+          "path": "The Illinois Address Confidentiality Program (750 ILCS 61) provides a substitute address for survivors of domestic violence, sexual assault, stalking, and trafficking.",
+          "effort": "high",
+          "eligibility": "restricted"
+        }
+      ],
+      "biometric_note": "Illinois BIPA (740 ILCS 14) is the strictest biometric statute in the country: written informed consent before collection, a published retention and destruction schedule, and a private right of action. Any face feature in this product must satisfy BIPA to be shippable in Illinois."
+    },
+
+    "FL": {
+      "label": "Florida",
+      "public_by_default": [
+        "property_deed",
+        "voter_registration",
+        "business_filing",
+        "court_record",
+        "professional_license",
+        "marriage_divorce"
+      ],
+      "notes": "Florida's Sunshine Law makes government records unusually open by default, and county property appraiser sites are among the easiest in the country to search by name.",
+      "suppression_paths": [
+        {
+          "applies_to": ["property_deed", "voter_registration"],
+          "path": "Florida Statute §119.071 exempts specific categories — law enforcement, judges, prosecutors, certain victims — from public disclosure of home address. Request the exemption from each agency holding the record.",
+          "effort": "high",
+          "eligibility": "restricted",
+          "citation": "Fla. Stat. §119.071"
+        },
+        {
+          "applies_to": ["voter_registration"],
+          "path": "Florida voter records are public, but the Address Confidentiality Program administered by the Attorney General provides a substitute address for eligible survivors.",
+          "effort": "high",
+          "eligibility": "restricted"
+        }
+      ]
+    },
+
+    "NY": {
+      "label": "New York",
+      "public_by_default": [
+        "property_deed",
+        "voter_registration",
+        "business_filing",
+        "court_record",
+        "professional_license",
+        "marriage_divorce"
+      ],
+      "suppression_paths": [
+        {
+          "applies_to": ["voter_registration", "property_deed"],
+          "path": "New York's Address Confidentiality Program (Exec. Law §108) provides a substitute address for survivors of domestic violence, stalking, human trafficking, and sexual offences.",
+          "effort": "high",
+          "eligibility": "restricted",
+          "citation": "N.Y. Exec. Law §108"
+        },
+        {
+          "applies_to": ["business_filing"],
+          "path": "New York LLC formation historically required a published address. Use a registered-agent service and amend the Articles of Organization.",
+          "effort": "medium",
+          "eligibility": "anyone"
+        }
+      ]
+    }
+  },
+
+  "broker_opt_out": {
+    "note": "These aggregate public records into name-searchable profiles. Opting out does not change the underlying record, but it removes the easiest path to it. Each requires re-checking every few months — brokers repopulate.",
+    "tiers": [
+      {
+        "tier": "highest leverage",
+        "description": "Large aggregators that feed most downstream people-search sites. Opting out here reduces exposure across many smaller sites.",
+        "effort": "medium"
+      },
+      {
+        "tier": "direct people-search",
+        "description": "Consumer-facing name lookup sites. Individually low-effort, collectively time-consuming; each has its own opt-out form.",
+        "effort": "high"
+      },
+      {
+        "tier": "credit-header data",
+        "description": "Derived from credit applications rather than public records. Handled through a separate process from public-record brokers.",
+        "effort": "medium"
+      }
+    ]
+  }
+}

@@ -98,6 +98,7 @@ jobs:
           - services/ddu-agent
           - services/ddu-osint
           - services/ddu-intel
+          - services/ddu-mirror-intel
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
