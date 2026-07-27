@@ -623,6 +623,95 @@ def test_wipe_endpoint_reports_what_it_destroyed(client):
     assert client.get("/intel/session/s_wipe").status_code == 404
 
 
+# ── Ingestion path (Engineer C's vision findings) ────────────────────────
+
+
+def _exif_finding(finding_id: str = "f_exif_1") -> dict:
+    """What Engineer C's EXIF worker would POST."""
+    return {
+        "id": finding_id,
+        "hop_depth": 1,
+        "type": "gps_exposure",
+        "label": "Home GPS in uploaded photo",
+        "verification_state": "confirmed",
+        "confidence": 0.95,
+        "severity_base": 0.9,
+        "reversible": True,
+        "remediation": {"action": "Strip EXIF before posting", "effort": "low"},
+        "platform": "instagram",
+        "source": "exif:GPSInfo",
+        "method": "exifread v3.0",
+        "subject_ref": "subject:s_ingest",
+    }
+
+
+def test_vision_findings_can_be_ingested(client):
+    client.post("/intel/session", json={"session_id": "s_ingest", "handles": ["demo_operator"]})
+    result = client.post(
+        "/intel/findings/ingest",
+        json={"session_id": "s_ingest", "producer": "ddu-mirror-vision", "findings": [_exif_finding()]},
+    ).json()
+
+    assert len(result["accepted"]) == 1
+    assert result["rejected"] == []
+    assert result["score"]["score"] > 0
+
+
+def test_ingested_findings_participate_fully(client):
+    """Once through the door they are ordinary findings — they score and prune."""
+    client.post("/intel/session", json={"session_id": "s_full", "handles": ["demo_operator"]})
+    client.post(
+        "/intel/findings/ingest",
+        json={"session_id": "s_full", "producer": "vision", "findings": [_exif_finding("f_exif_2")]},
+    )
+    before = client.get("/intel/score/s_full").json()["score"]
+
+    rejected = client.post(
+        "/intel/findings/reject", json={"session_id": "s_full", "finding_id": "f_exif_2"}
+    ).json()
+    assert rejected["score"]["score"] < before
+
+
+def test_ingest_forces_subject_ref_to_the_session_seed(client):
+    """Design rule 2: a producer cannot inject a finding about someone else."""
+    client.post("/intel/session", json={"session_id": "s_sub", "handles": ["demo_operator"]})
+    hostile = {**_exif_finding("f_hostile"), "subject_ref": "subject:someone_else"}
+    result = client.post(
+        "/intel/findings/ingest",
+        json={"session_id": "s_sub", "producer": "vision", "findings": [hostile]},
+    ).json()
+
+    assert len(result["accepted"]) == 1
+    assert result["accepted"][0]["subject_ref"] == "subject:s_sub"
+
+
+def test_ingest_rejects_schema_invalid_findings(client):
+    client.post("/intel/session", json={"session_id": "s_bad", "handles": ["demo_operator"]})
+    # reversible=False with no compensating control — design rule 7.
+    broken = {**_exif_finding("f_broken"), "reversible": False}
+    response = client.post(
+        "/intel/findings/ingest",
+        json={"session_id": "s_bad", "producer": "vision", "findings": [broken]},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["error"] == "no_valid_findings"
+
+
+def test_ingest_accepts_the_good_and_reports_the_bad(client):
+    client.post("/intel/session", json={"session_id": "s_mixed", "handles": ["demo_operator"]})
+    result = client.post(
+        "/intel/findings/ingest",
+        json={
+            "session_id": "s_mixed",
+            "producer": "vision",
+            "findings": [_exif_finding("f_ok"), {"id": "f_junk", "type": "not_a_type"}],
+        },
+    ).json()
+    assert len(result["accepted"]) == 1
+    assert len(result["rejected"]) == 1
+    assert result["rejected"][0]["id"] == "f_junk"
+
+
 def test_mock_endpoint_is_flagged_as_mock(client):
     payload = client.get("/intel/mock/findings").json()
     assert payload["is_mock"] is True

@@ -24,7 +24,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from . import actionlog as A
 from . import orchestrator as orch
@@ -35,7 +35,7 @@ from .personas import PERSONAS, load_persona_weights
 from .quarantine import classify_injection, parse_untrusted
 from .records import jurisdictions, personalize
 from .remediation import build_checklist
-from .schema import CONTRACT_VERSION, Origin
+from .schema import CONTRACT_VERSION, Finding, Origin
 from .session import store
 
 log = logging.getLogger("mirror-intel.api")
@@ -79,6 +79,29 @@ class DecisionRequest(BaseModel):
 
 class EditRequest(DecisionRequest):
     changes: dict[str, Any] = Field(default_factory=dict)
+
+
+class FindingIngest(BaseModel):
+    """Findings produced outside the discovery workers — Engineer C's vision layer.
+
+    Note there is no approval gate on this path, and that is deliberate rather
+    than an oversight. The human chose the file and pressed upload; that *is*
+    the consent act. Making them approve a second time before we read EXIF
+    from a photo they just handed us is ceremony, not control — and Track 3
+    is worth more when the gates are where decisions actually are. Every
+    ingested finding is still individually rejectable through the correction
+    loop, and still fails closed on `subject_ref`.
+    """
+
+    session_id: str
+    #: Schema-valid Finding payloads. Validated against the contract on the
+    #: way in, so a producer drifting from the schema fails loudly here rather
+    #: than silently corrupting the graph.
+    findings: list[dict[str, Any]] = Field(default_factory=list)
+    #: reveal_token -> raw value, for the session vault. Producers hand raw
+    #: values over here so the vault stays the only place they live.
+    raw_values: dict[str, str] = Field(default_factory=dict)
+    producer: str = "unknown"
 
 
 class FindingDecision(BaseModel):
@@ -134,8 +157,6 @@ def _session(session_id: str):
 @router.get("/contract")
 async def contract() -> dict[str, Any]:
     """The locked findings contract. C and D validate against this."""
-    from .schema import Finding
-
     return {
         "contract_version": CONTRACT_VERSION,
         "finding_schema": Finding.model_json_schema(),
@@ -357,6 +378,80 @@ async def next_moves(session_id: str) -> dict[str, Any]:
 
 
 # ── correction loop ──────────────────────────────────────────────────────
+
+
+@router.post("/findings/ingest")
+async def ingest_findings(body: FindingIngest) -> dict[str, Any]:
+    """Accept findings from a producer outside the discovery workers.
+
+    This is Engineer C's door into the graph — EXIF, object detection,
+    location inference, face linkage. Once through, they are ordinary
+    findings: they score, they chain into attack paths, they cascade when
+    rejected, and they refuse to be marked fixed if they're irreversible.
+
+    Two things are enforced here rather than trusted:
+
+    * **Schema validity.** Payloads are parsed through the real ``Finding``
+      model, so a producer that drifts from the contract gets a 422 naming the
+      field instead of quietly poisoning the score.
+    * **Subject ownership.** ``subject_ref`` is overwritten with this
+      session's verified seed, never read from the payload. A producer cannot
+      inject a finding about someone else even by accident — design rule 2.
+    """
+    session = _session(body.session_id)
+
+    parsed: list[Finding] = []
+    errors: list[dict[str, Any]] = []
+    for index, payload in enumerate(body.findings):
+        try:
+            # Force the subject rather than validating it. Trusting a producer
+            # to set this correctly is a rule-2 hole waiting to happen.
+            parsed.append(Finding(**{**payload, "subject_ref": session.identity.subject_ref}))
+        except (ValidationError, TypeError) as exc:
+            errors.append({"index": index, "id": payload.get("id"), "error": str(exc)[:400]})
+
+    if errors and not parsed:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "no_valid_findings",
+                "contract_version": CONTRACT_VERSION,
+                "rejected": errors,
+            },
+        )
+
+    added = session.add_findings(parsed, raw_values=body.raw_values or None)
+
+    session.log.record(
+        A.FINDING_ADDED,
+        actor=Origin.SYSTEM,
+        subject=body.producer,
+        detail=f"{body.producer} contributed {len(added)} finding(s)"
+        + (f"; {len(errors)} rejected as schema-invalid" if errors else "."),
+        producer=body.producer,
+        accepted=len(added),
+        rejected=len(errors),
+    )
+    for finding in added:
+        session.log.record(
+            A.FINDING_ADDED,
+            actor=Origin.AGENT,
+            subject=finding.id,
+            detail=finding.label,
+            type=finding.type.value,
+            producer=body.producer,
+        )
+
+    assert session.score is not None
+    return {
+        "session_id": body.session_id,
+        "producer": body.producer,
+        "accepted": [f.model_dump(mode="json") for f in added],
+        "rejected": errors,
+        "score": session.score.model_dump(mode="json"),
+        "attack_paths": [p.model_dump(mode="json") for p in session.attack_paths],
+        "attribution": [a.model_dump(mode="json") for a in session.attribution],
+    }
 
 
 @router.post("/findings/reject")
