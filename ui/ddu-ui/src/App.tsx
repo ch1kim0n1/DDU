@@ -21,6 +21,7 @@ import {GraphView} from "./GraphView";
 import {MapView} from "./MapView";
 import {Scene3D} from "./Scene3D";
 import {TimelineView} from "./TimelineView";
+import {MirrorOnboarding} from "./MirrorOnboarding";
 import {
   useCaseMotion,
   useCountUp,
@@ -814,6 +815,9 @@ export default function App() {
   }, []);
 
   const evidenceMatch = path.match(/^\/investigations\/([^/]+)\/evidence\/(.+)$/);
+  if (path === "/mirror") {
+    return <MirrorOnboarding />;
+  }
   if (evidenceMatch) {
     return (
       <EvidencePage
