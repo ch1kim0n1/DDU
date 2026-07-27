@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools==80.9.0", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ddu-mirror-intel"
+version = "0.1.0"
+description = "DDU Mirror — discovery, intelligence, and human-in-the-loop agent (Engineer B)"
+requires-python = ">=3.11"
+dependencies = [
+    "ddu-py-common==0.0.1",
+    "fastapi==0.136.3",
+    "httpx==0.28.1",
+    "pydantic==2.13.4",
+    "uvicorn[standard]==0.44.0",
+]
+
+# Optional on purpose. The service boots, scans, scores, and demos without
+# either of these — `anthropic` missing drops the LLM layer to the
+# deterministic offline provider, and `sherlock-project` missing falls back to
+# cached account results. A hackathon demo should not be one pip install away
+# from a blank screen.
+[project.optional-dependencies]
+llm = ["anthropic==0.116.0"]
+discovery = ["sherlock-project==0.15.0"]
+
+[tool.setuptools]
+py-modules = ["app"]
+
+[tool.setuptools.packages.find]
+include = ["mirror_intel*"]
+
+[tool.setuptools.package-data]
+mirror_intel = ["data/*.json"]
