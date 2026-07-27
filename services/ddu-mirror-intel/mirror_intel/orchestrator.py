@@ -42,7 +42,7 @@ from .guardrails import TargetRefusedError
 from .quarantine import parse_untrusted
 from .records import advise
 from .schema import Finding, Origin, Proposal, ProposalStatus
-from .session import Session
+from .session import SEED_FINDING_ID, Session
 
 log = logging.getLogger("mirror-intel.orchestrator")
 
@@ -301,6 +301,10 @@ class Orchestrator:
 
     def _draft(self, step_key: str, inputs: dict[str, Any]) -> Proposal:
         step = STEPS[step_key]
+        # Hang first-hop expansions off the seed node. Without this every
+        # worker's output lands unparented at depth 1 and no attack path can
+        # form — the graph is a spray, not a tree.
+        inputs.setdefault("parent_id", SEED_FINDING_ID)
         self._proposal_seq += 1
         proposal = Proposal(
             id=f"prop_{self._proposal_seq:02d}_{uuid.uuid4().hex[:4]}",
