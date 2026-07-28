@@ -17,14 +17,11 @@ The loop:
 Every transition is an action-log entry, so the log answers "who authorized
 this expansion?" for every finding in the graph.
 
-**On LangGraph.** The spec names LangGraph with ``interrupt_before`` on every
-expansion. What that buys is exactly the pause-resume contract implemented
-here; what it costs is a dependency, a checkpointer, and a serialization story
-for a state machine with four states. On a 24-hour clock that trade doesn't
-pay, so the contract is implemented directly. The interface Engineer D
-consumes — ``agent.awaiting_approval`` → ``agent.approve(node_id)`` — is
-identical either way, and ``plan``/``execute`` are pure enough to drop into
-LangGraph nodes later if the orchestration grows past a linear plan.
+``workflow.py`` places this deterministic planner/executor behind a real
+LangGraph ``interrupt``. Redis or SQLite checkpoints hold the resumable graph
+cursor; the encrypted session backend holds raw pending inputs. Keeping the
+worker logic here makes replay idempotence and the authorization assertion
+easy to test without weakening the checkpointed runtime.
 """
 
 from __future__ import annotations
@@ -229,6 +226,26 @@ class Orchestrator:
     #: — but the handler still needs the real value on approval.
     _pending_inputs: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
 
+    def __post_init__(self) -> None:
+        persisted = self.session.workflow_state
+        self.cancelled = bool(persisted.get("cancelled", self.cancelled))
+        self._proposal_seq = int(persisted.get("proposal_seq", self._proposal_seq))
+        self._pending_inputs = {
+            str(proposal_id): dict(inputs)
+            for proposal_id, inputs in dict(persisted.get("pending_inputs", {})).items()
+        }
+
+    def _sync_state(self) -> None:
+        state = dict(self.session.workflow_state)
+        state.update(
+            {
+                "cancelled": self.cancelled,
+                "proposal_seq": self._proposal_seq,
+                "pending_inputs": self._pending_inputs,
+            }
+        )
+        self.session.workflow_state = state
+
     # ── planning ─────────────────────────────────────────────────────────
 
     def plan(self, context: dict[str, Any] | None = None) -> list[Proposal]:
@@ -333,6 +350,7 @@ class Orchestrator:
             step=step.key,
             touches_external=step.touches_external,
         )
+        self._sync_state()
         return proposal
 
     # ── human decisions ──────────────────────────────────────────────────
@@ -348,6 +366,7 @@ class Orchestrator:
             detail=f"Operator approved: {proposal.title}",
             step=proposal.step,
         )
+        self._sync_state()
         return proposal
 
     def edit_and_approve(
@@ -384,6 +403,7 @@ class Orchestrator:
         )
         if ignored:
             log.warning("ignored non-editable input(s) %s on %s", ignored, proposal_id)
+        self._sync_state()
         return proposal
 
     def reject(self, proposal_id: str, reason: str | None = None) -> Proposal:
@@ -400,6 +420,7 @@ class Orchestrator:
             step=proposal.step,
             reason=reason,
         )
+        self._sync_state()
         return proposal
 
     def cancel(self, reason: str | None = None) -> int:
@@ -424,6 +445,7 @@ class Orchestrator:
             detail=f"Operator halted the scan. {dropped} pending action(s) dropped.",
             reason=reason,
         )
+        self._sync_state()
         return dropped
 
     # ── execution ────────────────────────────────────────────────────────
@@ -499,6 +521,7 @@ class Orchestrator:
             )
 
         self._pending_inputs.pop(proposal_id, None)
+        self._sync_state()
         return added, meta
 
     # ── attacker-next-move hypotheses ────────────────────────────────────
@@ -584,7 +607,7 @@ _orchestrators: dict[str, Orchestrator] = {}
 
 def for_session(session: Session) -> Orchestrator:
     orch = _orchestrators.get(session.session_id)
-    if orch is None:
+    if orch is None or orch.session is not session:
         orch = Orchestrator(session=session)
         _orchestrators[session.session_id] = orch
     return orch

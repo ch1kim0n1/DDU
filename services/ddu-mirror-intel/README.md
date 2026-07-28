@@ -57,6 +57,11 @@ disclosed in the response payloads rather than hidden — see *Honesty flags*.
 | `MIRROR_FORCE_OFFLINE=1` | Forces the deterministic provider (demo safety). |
 | `MIRROR_PERSONA_WEIGHTS` | Path to Engineer A's persona matrix JSON. |
 | `MIRROR_REVEAL_SECRET` | HMAC secret for reveal tokens. Absent → per-process random. |
+| `MIRROR_REDIS_URL` | Enables encrypted TTL sessions, Redis checkpoints, and Pub/Sub. |
+| `MIRROR_SESSION_ENCRYPTION_KEY` | Required 32-byte base64 key whenever Redis is enabled. |
+| `MIRROR_IDENTITY_REQUIRED=1` | Requires a signed OIDC/service identity assertion. |
+| `MIRROR_REQUIRE_LIVE_PROVIDERS=1` | Refuses cached HIBP/Sherlock fallbacks. |
+| `MIRROR_REQUIRE_ELEVENLABS=1` | Makes both ElevenLabs STT and TTS deployment requirements. |
 
 ---
 
@@ -112,7 +117,10 @@ mirror_intel/
 ├── remediation.py     # severity ÷ effort ranking + persona-specific copy
 ├── records.py         # public records advisor — NO lookups, NO scraping
 ├── actionlog.py       # append-only HITL log
-├── session.py         # findings store, vault, recompute-on-mutation
+├── identity.py        # OIDC/JWKS or signed-service identity verification
+├── session.py         # encrypted Redis TTL store + local memory backend
+├── events.py          # Redis Pub/Sub or local WebSocket fan-out
+├── workflow.py        # checkpointed LangGraph interrupt/resume runtime
 ├── orchestrator.py    # propose → approve/edit/reject → execute
 ├── mock.py            # schema-valid fake findings for C and D
 ├── api.py             # FastAPI router, mounts at /intel
@@ -175,14 +183,13 @@ Every degraded path is disclosed in its own payload rather than hidden:
 
 ## Two decisions worth defending
 
-**LangGraph is not a dependency.** The spec names LangGraph with
-`interrupt_before` on every expansion. What that buys is the pause-resume
-contract; what it costs is a dependency, a checkpointer, and a serialization
-story for a state machine with four states. On a 24-hour clock that trade
-doesn't pay, so the contract is implemented directly in `orchestrator.py`. The
-interface Engineer D consumes is identical either way, and `plan`/`execute`
-are pure enough to drop into LangGraph nodes if orchestration outgrows a
-linear plan.
+**LangGraph owns the approval cursor.** Every proposal arms a stable graph
+thread and pauses at a dynamic `interrupt`. Approve, edit, or reject resumes
+that checkpoint with `Command(resume=...)`; discovery runs only in the node
+after the interrupt. Redis is the production checkpointer, SQLite is the
+durable single-worker option, and memory remains available for isolated tests.
+Raw decision inputs stay in the separately encrypted session store rather than
+the searchable checkpoint index.
 
 **Linkability is hand-rolled, not Splink.** Probabilistic record linkage is
 right for reconciling millions of records and wrong for scoring four signals
@@ -195,7 +202,7 @@ way a match weight is not.
 
 ## Test suite
 
-57 tests, all passing, no network required. They're organized around the
+70 tests, all passing, no network required. They're organized around the
 claims the product makes on stage — if one fails, a sentence in the pitch has
 become false. That's the bar for inclusion, rather than coverage for its own
 sake.

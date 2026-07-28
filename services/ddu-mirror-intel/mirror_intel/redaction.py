@@ -34,10 +34,17 @@ from .schema import EvidenceItem, Finding
 
 log = logging.getLogger("mirror-intel.redaction")
 
-#: Per-process secret. Reveal tokens are session-scoped and die with the
-#: process, which is the behaviour we want for an ephemeral product — a token
-#: captured from the wire is worthless after the session ends.
-_TOKEN_SECRET = os.environ.get("MIRROR_REVEAL_SECRET", "").encode() or secrets.token_bytes(32)
+#: Redis workers derive the same HMAC secret from the shared encryption key;
+#: local ephemeral mode keeps the original per-process behaviour.
+_configured_secret = (
+    os.environ.get("MIRROR_REVEAL_SECRET", "")
+    or os.environ.get("MIRROR_SESSION_ENCRYPTION_KEY", "")
+)
+_TOKEN_SECRET = (
+    hashlib.sha256(_configured_secret.encode()).digest()
+    if _configured_secret
+    else secrets.token_bytes(32)
+)
 
 
 # ── Free-text scrubbing ──────────────────────────────────────────────────────
@@ -45,7 +52,7 @@ _TOKEN_SECRET = os.environ.get("MIRROR_REVEAL_SECRET", "").encode() or secrets.t
 # patterns get a chance to shred it.
 
 _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("EMAIL", re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]{2,}")),
+    ("EMAIL", re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")),
     ("URL", re.compile(r"https?://[^\s<>\"]+")),
     (
         "COORD",

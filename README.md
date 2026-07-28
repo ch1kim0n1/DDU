@@ -84,6 +84,13 @@ DDU owns the intelligence lifecycle. The open-source projects own their capabili
 
 **Pre-Alpha / runnable local stack.** Product Development Document and engineering roadmap are in this repository. Use `make tier1` then `./infra/scripts/dev-services.sh` (or `make up` for containerized DDU services).
 
+The `3D-scene` branch also contains the DDU Mirror Engineer D experience:
+a react-three-fiber exposure graph, human approval controls, evidence drawer,
+MapLibre view, remediation simulation, session wipe, and PII-disciplined
+ElevenLabs voice adapter. See [`ui/ddu-ui/README.md`](./ui/ddu-ui/README.md),
+the [`demo script`](./docs/engineer-d-demo-script.md), and the
+[`system card`](./docs/system-card-mirror-experience.md).
+
 ## Documents
 
 - [`main-pdd.md`](./main-pdd.md) — Product Development Document (full product spec)

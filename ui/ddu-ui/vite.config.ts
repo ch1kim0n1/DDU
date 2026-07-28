@@ -5,5 +5,16 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    proxy: {
+      "/intel": {
+        target: "http://localhost:8120",
+        changeOrigin: true,
+        ws: true,
+      },
+      "/healthz": {
+        target: "http://localhost:8120",
+        changeOrigin: true,
+      },
+    },
   },
 });

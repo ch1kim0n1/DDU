@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from ..guardrails import VerifiedIdentity, assert_self, scrub_incidental_identifiers
+from ..providers import truthy
 from ..redaction import redact_evidence
 from ..reversibility import classify
 from ..schema import Finding, FindingType, Origin, VerificationState
@@ -129,6 +130,10 @@ def breach_findings(
     records = _fetch_live(normalized)
     live = records is not None
     if not live:
+        if truthy("MIRROR_REQUIRE_LIVE_PROVIDERS"):
+            raise RuntimeError(
+                "HIBP live provider is required but unavailable; refusing cached data"
+            )
         records = _load_cache().get(normalized, [])
 
     findings: list[Finding] = []
