@@ -1,0 +1,46 @@
+{
+  "_note": "Cached breach records for demo addresses, shaped like HIBP API v3 responses. Findings from this file carry method='HIBP cached demo data (disclosed)' — say so on stage. Real scans set HIBP_API_KEY and hit the live endpoint. Every breach named here is a real, widely-documented public incident; the association with the demo address is fabricated.",
+
+  "demo@ddu-mirror.local": [
+    {
+      "Name": "Collection1",
+      "Title": "Collection #1",
+      "Domain": "",
+      "BreachDate": "2019-01-07",
+      "AddedDate": "2019-01-16T21:46:07Z",
+      "IsVerified": true,
+      "Description": "In January 2019 a large collection of credential stuffing lists was found distributed across hacking forums. The data contained email addresses and plain text passwords aggregated from many earlier breaches.",
+      "DataClasses": ["Email addresses", "Passwords"]
+    },
+    {
+      "Name": "LinkedIn",
+      "Title": "LinkedIn",
+      "Domain": "linkedin.com",
+      "BreachDate": "2012-05-05",
+      "AddedDate": "2016-05-21T21:35:40Z",
+      "IsVerified": true,
+      "Description": "In 2012 LinkedIn was breached and the passwords were not salted. The full extent of the incident only became public in 2016 when a much larger data set surfaced for sale.",
+      "DataClasses": ["Email addresses", "Passwords"]
+    },
+    {
+      "Name": "Dropbox",
+      "Title": "Dropbox",
+      "Domain": "dropbox.com",
+      "BreachDate": "2012-07-01",
+      "AddedDate": "2016-08-31T00:19:19Z",
+      "IsVerified": true,
+      "Description": "In mid-2012 Dropbox suffered a breach exposing stored credentials for tens of millions of accounts. Passwords were hashed, with a portion using a weaker scheme.",
+      "DataClasses": ["Email addresses", "Passwords"]
+    },
+    {
+      "Name": "Adobe",
+      "Title": "Adobe",
+      "Domain": "adobe.com",
+      "BreachDate": "2013-10-04",
+      "AddedDate": "2013-12-04T00:00:00Z",
+      "IsVerified": true,
+      "Description": "In October 2013 Adobe suffered a breach exposing account records including encrypted passwords and, notably, plain text password hints.",
+      "DataClasses": ["Email addresses", "Password hints", "Passwords", "Usernames"]
+    }
+  ]
+}

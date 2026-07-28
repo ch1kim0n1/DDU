@@ -1,0 +1,44 @@
+.DS_Store
+.env
+.venv/
+__pycache__/
+*.py[cod]
+node_modules/
+dist/
+
+# Local development server logs
+ui/ddu-ui/vite*.log
+
+# Reference clones of upstream OSS repos — not part of DDU source.
+# 6.6GB; kept locally for reading only.
+open-source/
+
+# Local model caches
+.cache/
+.mirror/
+~/.cache/ddu/
+
+# Go build artifacts
+*.test
+*.out
+/bin/
+services/*/ddu-api
+services/*/ddu-collector
+services/*/ddu-discovery
+services/*/ddu-ingest
+services/*/ddu-storage
+services/*/ddu-graph-store
+services/*/ddu-vector
+services/*/ddu-lineage
+services/*/ddu-webcapture
+
+# Python build artifacts
+*.egg-info/
+*.egg-link
+build/
+*.so
+
+# Editor
+.idea/
+.vscode/
+*.swp

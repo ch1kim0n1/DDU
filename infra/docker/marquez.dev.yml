@@ -1,0 +1,37 @@
+# Marquez dev config for OpenLineage backend
+server:
+  applicationConnectors:
+    - type: http
+      port: 5000
+  adminConnectors:
+    - type: http
+      port: 5001
+  requestLog:
+    appenders:
+      - type: console
+        layout:
+          type: json
+
+db:
+  driverClass: org.postgresql.Driver
+  url: jdbc:postgresql://marquez-db:5432/marquez
+  user: marquez
+  password: marquez
+  properties:
+    charSet: UTF-8
+    hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect
+    hibernate.show_sql: false
+    hibernate.format_sql: false
+  maxSize: 8
+  minSize: 2
+
+migrateOnStartup: true
+
+logging:
+  level: INFO
+  loggers:
+    marquez: INFO
+  appenders:
+    - type: console
+      layout:
+        type: json

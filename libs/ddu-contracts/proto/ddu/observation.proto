@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package ddu.contracts.v1;
+
+import "ddu/provenance.proto";
+
+option go_package = "github.com/ddu/ddu-contracts/go/dducontractsv1";
+option java_package = "io.ddu.contracts.v1";
+option java_multiple_files = true;
+
+// An Observation is something directly detected or extracted by a DDU service.
+// Observations are NEVER promoted to facts automatically. They feed the
+// Entity Resolution Engine and the Confidence Engine.
+message Observation {
+  string id = 1;                      // UUID
+  string investigation_id = 2;
+  string evidence_id = 3;             // evidence this was extracted from
+  ObservationType type = 4;
+  string label = 5;                   // e.g. "vehicle", "person", "Austin", "@username"
+  float detector_confidence = 6;      // raw model confidence, NOT the DDU confidence
+  map<string, string> attributes = 7; // type-specific: bbox, text, lat/lng, etc.
+  Provenance provenance = 8;
+  string observed_at = 9;             // RFC3339 — when the observation was made
+  // Optional typed payloads — at most one populated per observation.
+  BoundingBox bbox = 10;              // for visual observations
+  GeoPoint geo = 11;                  // for geographic observations
+  TextObservation text = 12;          // for OCR / transcript observations
+}
+
+enum ObservationType {
+  OBSERVATION_TYPE_UNSPECIFIED = 0;
+  OBSERVATION_TYPE_OBJECT = 1;        // visual object detection
+  OBSERVATION_TYPE_FACE = 2;          // face detection
+  OBSERVATION_TYPE_TEXT = 3;          // OCR / document text
+  OBSERVATION_TYPE_SPEECH = 4;        // ASR transcript segment
+  OBSERVATION_TYPE_LOCATION = 5;      // geographic observation
+  OBSERVATION_TYPE_USERNAME = 6;      // username extracted from media
+  OBSERVATION_TYPE_METADATA = 7;      // EXIF, headers, etc.
+  OBSERVATION_TYPE_ENTITY_MENTION = 8;// named entity in text
+}
+
+message BoundingBox {
+  float x = 1;                        // normalized 0..1
+  float y = 2;
+  float width = 3;
+  float height = 4;
+  int32 frame_number = 5;             // for video
+  float timestamp_sec = 6;            // for video
+}
+
+message GeoPoint {
+  double latitude = 1;
+  double longitude = 2;
+  float radius_meters = 3;            // uncertainty
+}
+
+message TextObservation {
+  string text = 1;
+  string language = 2;                // BCP-47
+  float start_sec = 3;                // for transcripts
+  float end_sec = 4;
+}
+
+message CreateObservationRequest {
+  Observation observation = 1;
+}
+
+message CreateObservationResponse {
+  Observation observation = 1;
+}
+
+message GetObservationRequest {
+  string id = 1;
+}
+
+message ListObservationsRequest {
+  string investigation_id = 1;
+  string evidence_id = 2;
+  ObservationType type = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+}
+
+message ListObservationsResponse {
+  repeated Observation observations = 1;
+  string next_page_token = 2;
+}

@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package ddu.contracts.v1;
+
+import "ddu/provenance.proto";
+
+option go_package = "github.com/ddu/ddu-contracts/go/dducontractsv1";
+option java_package = "io.ddu.contracts.v1";
+option java_multiple_files = true;
+
+// A CandidateRelationship is a machine-proposed association between two entities.
+// It is NEVER a verified relationship. It must be corroborated, contradicted,
+// or rejected by the Confidence Engine and/or a human investigator.
+//
+// CandidateRelationships are the primary output of the DDU Entity Resolution
+// Engine and the proprietary Intelligence Correlation Engine.
+message CandidateRelationship {
+  string id = 1;                      // UUID
+  string investigation_id = 2;
+  string source_entity_id = 3;        // graph entity id
+  string target_entity_id = 4;
+  string relationship_type = 5;       // e.g. POSSIBLY_BELONGS_TO, POSSIBLY_SAME_AS
+  Confidence confidence = 6;
+  VerificationState verification_state = 7;
+  repeated string supporting_evidence_ids = 8;
+  repeated string contradicting_evidence_ids = 9;
+  repeated Signal signals = 10;       // individual contributing signals
+  Provenance provenance = 11;
+  string created_at = 12;
+  string updated_at = 13;
+  string resolved_by = 14;            // human or service that verified/rejected
+  string resolved_at = 15;
+  string resolution_note = 16;
+}
+
+// A single signal contributing to (or against) a candidate relationship.
+// Each signal is independently inspectable by the investigator.
+message Signal {
+  string id = 1;
+  enum Direction {
+    DIRECTION_UNSPECIFIED = 0;
+    DIRECTION_SUPPORTING = 1;
+    DIRECTION_CONTRADICTING = 2;
+  }
+  Direction direction = 2;
+  string signal_type = 3;             // "username_similarity", "face_match", "geo_overlap", ...
+  float weight = 4;                   // 0..1 contribution
+  float raw_score = 5;                // raw similarity/match score from the source tool
+  string source_service = 6;          // e.g. "ddu-face", "ddu-vector"
+  string source_evidence_id = 7;
+  map<string, string> details = 8;    // signal-specific context
+}
+
+message CreateCandidateRelationshipRequest {
+  CandidateRelationship relationship = 1;
+}
+
+message CreateCandidateRelationshipResponse {
+  CandidateRelationship relationship = 1;
+}
+
+message GetCandidateRelationshipRequest {
+  string id = 1;
+}
+
+message ListCandidateRelationshipsRequest {
+  string investigation_id = 1;
+  string source_entity_id = 2;
+  string target_entity_id = 3;
+  string relationship_type = 4;
+  VerificationState verification_state = 5;
+  float min_confidence = 6;
+  int32 page_size = 7;
+  string page_token = 8;
+}
+
+message ListCandidateRelationshipsResponse {
+  repeated CandidateRelationship relationships = 1;
+  string next_page_token = 2;
+}
+
+message ResolveCandidateRelationshipRequest {
+  string id = 1;
+  VerificationState new_state = 2;
+  string resolved_by = 3;
+  string resolution_note = 4;
+}

@@ -1,0 +1,13 @@
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - STANDARD
+  # Contract files retain the stable ddu/*.proto import paths. Moving them to
+  # the package-derived directory would be a wire-contract source-path break.
+  except:
+    - PACKAGE_DIRECTORY_MATCH
+breaking:
+  use:
+    - FILE

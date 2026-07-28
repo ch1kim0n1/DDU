@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package ddu.contracts.v1;
+
+import "ddu/service.proto";
+
+option go_package = "github.com/ddu/ddu-contracts/go/dducontractsv1";
+option java_package = "io.ddu.contracts.v1";
+option java_multiple_files = true;
+
+// Provenance block attached to every observation, claim, candidate relationship,
+// and any other derived artifact. Required by the DDU contract.
+message Provenance {
+  string investigation_id = 1;        // investigation this artifact belongs to
+  string produced_by_service = 2;     // e.g. "ddu-vision"
+  ServiceVersion producer_version = 3;
+  string tool = 4;                    // upstream tool name
+  string tool_version = 5;
+  string model = 6;
+  string model_version = 7;
+  string produced_at = 8;             // RFC3339 timestamp
+  string run_id = 9;                  // OpenLineage run ID
+  string job_name = 10;               // OpenLineage job name
+  repeated string input_evidence_ids = 11;  // evidence objects consumed
+  string extraction_method = 12;      // e.g. "grounded-sam-2", "paddleocr"
+  map<string, string> parameters = 13;     // input parameters that produced this
+}
+
+// Epistemic classification. DDU never collapses these into a single "truth".
+enum EpistemicClass {
+  EPISTEMIC_CLASS_UNSPECIFIED = 0;
+  EPISTEMIC_CLASS_OBSERVATION = 1;    // directly detected
+  EPISTEMIC_CLASS_CLAIM = 2;          // asserted by external source
+  EPISTEMIC_CLASS_INFERENCE = 3;      // machine-generated
+  EPISTEMIC_CLASS_HYPOTHESIS = 4;     // possible explanation
+  EPISTEMIC_CLASS_FACT = 5;           // met verification threshold
+  EPISTEMIC_CLASS_CONTRADICTION = 6;  // incompatible with another claim
+}
+
+// Verification state for a relationship or claim.
+enum VerificationState {
+  VERIFICATION_STATE_UNSPECIFIED = 0;
+  VERIFICATION_STATE_PENDING = 1;
+  VERIFICATION_STATE_CORROBORATED = 2;
+  VERIFICATION_STATE_VERIFIED = 3;
+  VERIFICATION_STATE_CONTRADICTED = 4;
+  VERIFICATION_STATE_REJECTED = 5;
+}
+
+// Confidence is never a blind average of model probabilities.
+// It is computed by the DDU Confidence Engine from supporting + contradicting signals.
+message Confidence {
+  float value = 1;                    // 0.0 - 1.0
+  repeated string supporting_signals = 2;
+  repeated string contradicting_signals = 3;
+  int32 independent_source_count = 4;
+  string computed_by = 5;             // service that computed this
+  string computed_at = 6;             // RFC3339
+  map<string, float> signal_weights = 7;  // optional breakdown
+}

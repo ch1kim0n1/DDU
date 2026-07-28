@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package ddu.contracts.v1;
+
+import "ddu/service.proto";
+
+option go_package = "github.com/ddu/ddu-contracts/go/dducontractsv1";
+option java_package = "io.ddu.contracts.v1";
+option java_multiple_files = true;
+
+// OpenLineage event wrapper emitted by every DDU service on every invocation.
+// Maps directly to the OpenLineage RunEvent schema. Services emit START, RUNNING,
+// COMPLETE, FAIL. DDU adds ddu-specific facets via the facets map.
+message LineageEvent {
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    EVENT_TYPE_START = 1;
+    EVENT_TYPE_RUNNING = 2;
+    EVENT_TYPE_COMPLETE = 3;
+    EVENT_TYPE_FAIL = 4;
+    EVENT_TYPE_ABORT = 5;
+  }
+  EventType event_type = 1;
+  string event_time = 2;              // RFC3339
+  LineageRun run = 3;
+  LineageJob job = 4;
+  repeated LineageInput inputs = 5;
+  repeated LineageOutput outputs = 6;
+  ServiceVersion producer = 7;
+}
+
+message LineageRun {
+  string run_id = 1;                  // UUID
+  map<string, string> facets = 2;     // OpenLineage facets as JSON strings
+}
+
+message LineageJob {
+  string namespace = 1;               // e.g. "ddu.dev" or "ddu.prod"
+  string name = 2;                    // e.g. "ddu-vision:grounded-sam-2"
+  map<string, string> facets = 3;
+}
+
+message LineageInput {
+  string namespace = 1;
+  string name = 2;                    // evidence id or entity id
+  string type = 3;                    // "DDU.EVIDENCE", "DDU.ENTITY", "DDU.OBSERVATION"
+  map<string, string> facets = 4;
+}
+
+message LineageOutput {
+  string namespace = 1;
+  string name = 2;
+  string type = 3;
+  map<string, string> facets = 4;
+}
+
+message EmitLineageEventRequest {
+  LineageEvent event = 1;
+}
+
+message EmitLineageEventResponse {
+  bool accepted = 1;
+  string run_id = 2;
+}

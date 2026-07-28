@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package ddu.contracts.v1;
+
+import "ddu/provenance.proto";
+
+option go_package = "github.com/ddu/ddu-contracts/go/dducontractsv1";
+option java_package = "io.ddu.contracts.v1";
+option java_multiple_files = true;
+
+// Core entity types from PDD section 16. Stored in OpenSPG, persisted to Neo4j.
+// Entity ids are graph-stable identifiers, not content hashes (those are Evidence).
+message Entity {
+  string id = 1;                      // UUID
+  string investigation_id = 2;
+  EntityType type = 3;
+  map<string, string> attributes = 4; // type-specific canonical attributes
+  repeated string evidence_ids = 5;   // evidence supporting this entity
+  string created_at = 6;
+  string updated_at = 7;
+  Provenance provenance = 8;
+}
+
+enum EntityType {
+  ENTITY_TYPE_UNSPECIFIED = 0;
+  ENTITY_TYPE_PERSON = 1;
+  ENTITY_TYPE_ACCOUNT = 2;
+  ENTITY_TYPE_USERNAME = 3;
+  ENTITY_TYPE_ORGANIZATION = 4;
+  ENTITY_TYPE_LOCATION = 5;
+  ENTITY_TYPE_OBJECT = 6;
+  ENTITY_TYPE_VEHICLE = 7;
+  ENTITY_TYPE_IMAGE = 8;
+  ENTITY_TYPE_VIDEO = 9;
+  ENTITY_TYPE_AUDIO = 10;
+  ENTITY_TYPE_DOCUMENT = 11;
+  ENTITY_TYPE_POST = 12;
+  ENTITY_TYPE_EVENT = 13;
+  ENTITY_TYPE_OBSERVATION = 14;
+  ENTITY_TYPE_EVIDENCE = 15;
+  ENTITY_TYPE_SOURCE = 16;
+  ENTITY_TYPE_CLAIM = 17;
+  ENTITY_TYPE_HYPOTHESIS = 18;
+  ENTITY_TYPE_INVESTIGATION = 19;
+  ENTITY_TYPE_CANDIDATE_ACCOUNT = 20; // from Sherlock, not yet linked to Person
+}
+
+message CreateEntityRequest { Entity entity = 1; }
+message CreateEntityResponse { Entity entity = 1; }
+message GetEntityRequest { string id = 1; }
+message ListEntitiesRequest {
+  string investigation_id = 1;
+  EntityType type = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+message ListEntitiesResponse {
+  repeated Entity entities = 1;
+  string next_page_token = 2;
+}
+
+// A verified relationship in the graph (post-resolution). CandidateRelationships
+// that pass verification become Relationships. Contradicted ones are kept for
+// audit but marked.
+message Relationship {
+  string id = 1;
+  string investigation_id = 2;
+  string source_entity_id = 3;
+  string target_entity_id = 4;
+  string relationship_type = 5;       // OWNS, USES, APPEARS_IN, OBSERVED_AT, ...
+  VerificationState verification_state = 6;
+  Confidence confidence = 7;
+  repeated string evidence_ids = 8;
+  string candidate_relationship_id = 9;  // origin if derived from a candidate
+  Provenance provenance = 10;
+  string created_at = 11;
+  string updated_at = 12;
+}
+
+message CreateRelationshipRequest { Relationship relationship = 1; }
+message CreateRelationshipResponse { Relationship relationship = 1; }
+message GetRelationshipRequest { string id = 1; }
+message ListRelationshipsRequest {
+  string investigation_id = 1;
+  string source_entity_id = 2;
+  string target_entity_id = 3;
+  string relationship_type = 4;
+  VerificationState verification_state = 5;
+  int32 page_size = 6;
+  string page_token = 7;
+}
+message ListRelationshipsResponse {
+  repeated Relationship relationships = 1;
+  string next_page_token = 2;
+}

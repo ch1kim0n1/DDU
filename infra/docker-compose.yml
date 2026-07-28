@@ -1,0 +1,290 @@
+# DDU Local Development Stack
+# Tier 1 external services only. DDU-owned services run separately during dev.
+#
+# Usage:
+#   docker compose up -d
+#   docker compose ps
+#   docker compose logs -f <service>
+#   docker compose down -v   # WARNING: destroys data volumes
+#
+# Endpoints (localhost):
+#   Neo4j Bolt:      7687         Neo4j Browser:  http://localhost:7474
+#   Qdrant HTTP:     6333         Qdrant gRPC:     6334         Dashboard: http://localhost:6333/dashboard
+#   MinIO API:       9000         MinIO Console:   http://localhost:9001
+#   CompreFace:      http://localhost:8000          Admin UI:   http://localhost:8000
+#   SpiderFoot API:  http://localhost:5001
+#   Marquez API:     http://localhost:5000          Marquez UI: http://localhost:5000
+#
+# Default credentials are dev-only. Override via .env file (see .env.example).
+
+name: ddu-dev
+
+networks:
+  ddu-net:
+    driver: bridge
+
+volumes:
+  mirror-redis-data:
+  neo4j-data:
+  neo4j-logs:
+  qdrant-data:
+  minio-data:
+  compreface-postgres:
+  compreface-core:
+  spiderfoot-data:
+  marquez-db:
+
+services:
+  # Durable, TTL-bound DDU Mirror sessions, LangGraph checkpoints, and
+  # multi-worker WebSocket fan-out. Redis 8 includes the JSON/Search
+  # capabilities used by langgraph-checkpoint-redis.
+  mirror-redis:
+    image: redis:8.8.0-alpine
+    container_name: ddu-mirror-redis
+    networks: [ddu-net]
+    ports:
+      - "${MIRROR_REDIS_PORT:-6379}:6379"
+    environment:
+      MIRROR_REDIS_PASSWORD: ${MIRROR_REDIS_PASSWORD:-ddudevpass}
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - "${MIRROR_REDIS_PASSWORD:-ddudevpass}"
+    volumes:
+      - mirror-redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${MIRROR_REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Graph persistence (OpenSPG + Graphiti backend)
+  # ─────────────────────────────────────────────
+  neo4j:
+    image: neo4j:5.20.0-community
+    container_name: ddu-neo4j
+    networks: [ddu-net]
+    ports:
+      - "7474:7474"   # browser
+      - "7687:7687"   # bolt
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-ddudevpass}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1G
+      NEO4J_server_memory_pagecache_size: 512m
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Vector store
+  # ─────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.10.1
+    container_name: ddu-qdrant
+    networks: [ddu-net]
+    ports:
+      - "6333:6333"   # HTTP / dashboard
+      - "6334:6334"   # gRPC
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+      QDRANT__LOG_LEVEL: INFO
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/6333'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Evidence object store (S3-compatible)
+  # ─────────────────────────────────────────────
+  minio:
+    image: minio/minio:RELEASE.2024-08-17T01-24-54Z
+    container_name: ddu-minio
+    networks: [ddu-net]
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # console
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-dduadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-ddudevpass}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  # MinIO bootstrap: creates default buckets on first run
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    container_name: ddu-minio-init
+    networks: [ddu-net]
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-dduadmin} ${MINIO_ROOT_PASSWORD:-ddudevpass};
+      mc mb -p local/ddu-evidence || true;
+      mc mb -p local/ddu-models || true;
+      mc mb -p local/ddu-warcs || true;
+      mc mb -p local/ddu-frames || true;
+      mc mb -p local/ddu-audit || true;
+      mc anonymous set download local/ddu-models || true;
+      echo 'MinIO buckets initialized.';
+      "
+    restart: "no"
+
+  # ─────────────────────────────────────────────
+  # Face / person similarity
+  # CompreFace ships as 3 containers (postgres, core, api).
+  # ─────────────────────────────────────────────
+  compreface-postgres:
+    image: exadel/compreface-postgres-db:1.2.0
+    container_name: ddu-compreface-postgres
+    networks: [ddu-net]
+    environment:
+      POSTGRES_URL: jdbc:postgresql://localhost:5432/frs
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${COMPREFACE_POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: frs
+    volumes:
+      - compreface-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  compreface-core:
+    image: exadel/compreface-core:1.2.0
+    container_name: ddu-compreface-core
+    networks: [ddu-net]
+    depends_on:
+      compreface-postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_URL: jdbc:postgresql://compreface-postgres:5432/frs
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${COMPREFACE_POSTGRES_PASSWORD:-postgres}
+      ML_PORT: 3000
+      IMG_LENGTH_LIMIT: 640
+      UWSGI_PROCESSES: 2
+      UWSGI_THREADS: 1
+    volumes:
+      - compreface-core:/data
+    restart: unless-stopped
+
+  compreface-api:
+    image: exadel/compreface-api:1.2.0
+    container_name: ddu-compreface-api
+    networks: [ddu-net]
+    ports:
+      - "8000:8000"
+    depends_on:
+      compreface-core:
+        condition: service_started
+    environment:
+      POSTGRES_URL: jdbc:postgresql://compreface-postgres:5432/frs
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${COMPREFACE_POSTGRES_PASSWORD:-postgres}
+      SPRING_PROFILES_ACTIVE: dev
+      API_PORT: 8000
+      CORE_HOST: compreface-core
+      CORE_PORT: 3000
+      ML_PORT: 3000
+      SAVE_IMAGES_TO_DB: "true"
+      CONNECT_TIMEOUT: 10000
+      READ_TIMEOUT: 60000
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # OSINT enrichment
+  # SpiderFoot runs as a long-lived API server.
+  # ─────────────────────────────────────────────
+  spiderfoot:
+    image: ddu/spiderfoot:4.0
+    build:
+      context: ..
+      dockerfile: infra/docker/spiderfoot.Dockerfile
+    container_name: ddu-spiderfoot
+    networks: [ddu-net]
+    ports:
+      - "5001:5001"
+    volumes:
+      - spiderfoot-data:/var/lib/spiderfoot
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5001/', timeout=5)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Processing lineage (OpenLineage backend)
+  # Marquez = reference OpenLineage backend.
+  # ─────────────────────────────────────────────
+  marquez-db:
+    image: postgres:15-alpine
+    container_name: ddu-marquez-db
+    networks: [ddu-net]
+    environment:
+      POSTGRES_USER: ${MARQUEZ_DB_USER:-marquez}
+      POSTGRES_PASSWORD: ${MARQUEZ_DB_PASSWORD:-marquez}
+      POSTGRES_DB: marquez
+    volumes:
+      - marquez-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U marquez"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  marquez:
+    image: marquezproject/marquez:0.43.0
+    container_name: ddu-marquez
+    networks: [ddu-net]
+    ports:
+      - "${MARQUEZ_PORT:-5000}:5000"   # API + UI
+    depends_on:
+      marquez-db:
+        condition: service_healthy
+    environment:
+      MARQUEZ_CONFIG: /opt/marquez/marquez.dev.yml
+    volumes:
+      - ./docker/marquez.dev.yml:/opt/marquez/marquez.dev.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5001/healthcheck || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped

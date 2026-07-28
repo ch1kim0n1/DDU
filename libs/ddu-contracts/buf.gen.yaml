@@ -1,0 +1,14 @@
+version: v2
+plugins:
+  - remote: buf.build/protocolbuffers/go
+    out: go/dducontractsv1
+    opt:
+      - module=github.com/ddu/ddu-contracts/go/dducontractsv1
+  - remote: buf.build/grpc/go
+    out: go/dducontractsv1
+    opt:
+      - module=github.com/ddu/ddu-contracts/go/dducontractsv1
+  - remote: buf.build/protocolbuffers/python
+    out: python/ddu_contractsv1
+  - remote: buf.build/grpc/python
+    out: python/ddu_contractsv1

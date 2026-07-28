@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package ddu.contracts.v1;
+
+option go_package = "github.com/ddu/ddu-contracts/go/dducontractsv1";
+option java_package = "io.ddu.contracts.v1";
+option java_multiple_files = true;
+
+// Evidence is an immutable object stored in MinIO (or alternative S3-compatible store).
+// Every derived artifact references one or more Evidence objects by id (content hash).
+// Evidence is never mutated; new versions create new Evidence objects.
+message Evidence {
+  string id = 1;                      // content hash (sha256:...) — primary key
+  string investigation_id = 2;
+  EvidenceType type = 3;
+  string mime_type = 4;
+  int64 size_bytes = 5;
+  string storage_uri = 6;             // s3://ddu-evidence/<investigation>/<id>
+  string origin_uri = 7;              // source URL if acquired, else empty
+  string acquired_at = 8;             // RFC3339 — when DDU stored it
+  string original_timestamp = 9;      // RFC3339 — original event time if known
+  map<string, string> metadata = 10;  // EXIF, headers, etc.
+  string acquired_by = 11;            // service that ingested it
+  string acquisition_method = 12;     // "user-upload", "gallery-dl", "browsertrix", ...
+  repeated string parent_evidence_ids = 13;  // derived-from chain
+  bool is_original = 14;              // true for user-provided or acquired raw
+}
+
+enum EvidenceType {
+  EVIDENCE_TYPE_UNSPECIFIED = 0;
+  EVIDENCE_TYPE_IMAGE = 1;
+  EVIDENCE_TYPE_VIDEO = 2;
+  EVIDENCE_TYPE_AUDIO = 3;
+  EVIDENCE_TYPE_DOCUMENT = 4;
+  EVIDENCE_TYPE_WEB_SNAPSHOT = 5;     // WARC from Browsertrix
+  EVIDENCE_TYPE_PROFILE = 6;
+  EVIDENCE_TYPE_POST = 7;
+  EVIDENCE_TYPE_METADATA = 8;
+  EVIDENCE_TYPE_MODEL_OUTPUT = 9;
+  EVIDENCE_TYPE_OBJECT_CROP = 10;     // derived from image/video
+  EVIDENCE_TYPE_FRAME = 11;           // extracted video frame
+  EVIDENCE_TYPE_TRANSCRIPT = 12;      // derived from audio/video
+}
+
+// Request to register evidence already stored in MinIO.
+message RegisterEvidenceRequest {
+  Evidence evidence = 1;
+}
+
+message RegisterEvidenceResponse {
+  Evidence evidence = 1;
+  bool created = 2;                   // false if already registered (idempotent)
+}
+
+message GetEvidenceRequest {
+  string id = 1;
+}
+
+message ListEvidenceRequest {
+  string investigation_id = 1;
+  EvidenceType type = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListEvidenceResponse {
+  repeated Evidence evidence = 1;
+  string next_page_token = 2;
+}

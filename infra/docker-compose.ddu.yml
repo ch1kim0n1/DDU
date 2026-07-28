@@ -1,0 +1,327 @@
+# DDU-owned services on top of Tier 1 (infra/docker-compose.yml).
+# Usage from repo root:
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.ddu.yml up -d --build
+#   make up
+name: ddu-dev
+
+networks:
+  ddu-net:
+    driver: bridge
+
+x-go-env: &go-env
+  OPENLINEAGE_URL: http://ddu-lineage:8006
+  MODEL_MODE: ${MODEL_MODE:-stub}
+  AUTH_MODE: ${AUTH_MODE:-dev}
+  DDU_ALLOW_ROLE_HEADER: ${DDU_ALLOW_ROLE_HEADER:-true}
+  DDU_JWT_SECRET: ${DDU_JWT_SECRET:-ddu-dev-jwt-secret-change-me}
+
+x-py-env: &py-env
+  OPENLINEAGE_URL: http://ddu-lineage:8006
+  MODEL_MODE: ${MODEL_MODE:-stub}
+  DDU_GRAPH_STORE_URL: http://ddu-graph-store:8004
+  DDU_STORAGE_URL: http://ddu-storage:8003
+
+services:
+  ddu-lineage:
+    build:
+      context: ..
+      dockerfile: services/ddu-lineage/Dockerfile
+    container_name: ddu-lineage
+    networks: [ddu-net]
+    ports: ["8006:8006"]
+    environment:
+      PORT: 8006
+      OPENLINEAGE_URL: http://marquez:5000
+    depends_on:
+      marquez:
+        condition: service_started
+    restart: unless-stopped
+
+  ddu-storage:
+    build:
+      context: ..
+      dockerfile: services/ddu-storage/Dockerfile
+    container_name: ddu-storage
+    networks: [ddu-net]
+    ports: ["8003:8003"]
+    environment:
+      <<: *go-env
+      PORT: 8003
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-dduadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-ddudevpass}
+    depends_on:
+      minio:
+        condition: service_healthy
+      ddu-lineage:
+        condition: service_started
+    restart: unless-stopped
+
+  ddu-graph-store:
+    build:
+      context: ..
+      dockerfile: services/ddu-graph-store/Dockerfile
+    container_name: ddu-graph-store
+    networks: [ddu-net]
+    ports: ["8004:8004"]
+    environment:
+      <<: *go-env
+      PORT: 8004
+      NEO4J_URL: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-ddudevpass}
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      ddu-lineage:
+        condition: service_started
+    restart: unless-stopped
+
+  ddu-vector:
+    build:
+      context: ..
+      dockerfile: services/ddu-vector/Dockerfile
+    container_name: ddu-vector
+    networks: [ddu-net]
+    ports: ["8005:8005"]
+    environment:
+      <<: *go-env
+      PORT: 8005
+      QDRANT_URL: http://qdrant:6333
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      ddu-lineage:
+        condition: service_started
+    restart: unless-stopped
+
+  ddu-ingest:
+    build:
+      context: ..
+      dockerfile: services/ddu-ingest/Dockerfile
+    container_name: ddu-ingest
+    networks: [ddu-net]
+    ports: ["8002:8002"]
+    environment:
+      <<: *go-env
+      PORT: 8002
+      DDU_STORAGE_URL: http://ddu-storage:8003
+    depends_on: [ddu-storage, ddu-lineage]
+    restart: unless-stopped
+
+  ddu-webcapture:
+    build:
+      context: ..
+      dockerfile: services/ddu-webcapture/Dockerfile
+    container_name: ddu-webcapture
+    networks: [ddu-net]
+    ports: ["8007:8007"]
+    environment:
+      <<: *go-env
+      PORT: 8007
+      DDU_STORAGE_URL: http://ddu-storage:8003
+    depends_on: [ddu-storage]
+    restart: unless-stopped
+
+  ddu-collector:
+    build:
+      context: ..
+      dockerfile: services/ddu-collector/Dockerfile
+    container_name: ddu-collector
+    networks: [ddu-net]
+    ports: ["8008:8008"]
+    environment:
+      <<: *go-env
+      PORT: 8008
+      DDU_STORAGE_URL: http://ddu-storage:8003
+    depends_on: [ddu-storage]
+    restart: unless-stopped
+
+  ddu-discovery:
+    build:
+      context: ..
+      dockerfile: services/ddu-discovery/Dockerfile
+    container_name: ddu-discovery
+    networks: [ddu-net]
+    ports: ["8009:8009"]
+    environment:
+      <<: *go-env
+      PORT: 8009
+    restart: unless-stopped
+
+  ddu-vision:
+    build:
+      context: ..
+      dockerfile: services/ddu-vision/Dockerfile
+    container_name: ddu-vision
+    networks: [ddu-net]
+    ports: ["8101:8101"]
+    environment:
+      <<: *py-env
+      PORT: 8101
+    restart: unless-stopped
+
+  ddu-face:
+    build:
+      context: ..
+      dockerfile: services/ddu-face/Dockerfile
+    container_name: ddu-face
+    networks: [ddu-net]
+    ports: ["8102:8102"]
+    environment:
+      <<: *py-env
+      PORT: 8102
+    restart: unless-stopped
+
+  ddu-ocr:
+    build:
+      context: ..
+      dockerfile: services/ddu-ocr/Dockerfile
+    container_name: ddu-ocr
+    networks: [ddu-net]
+    ports: ["8103:8103"]
+    environment:
+      <<: *py-env
+      PORT: 8103
+    restart: unless-stopped
+
+  ddu-audio:
+    build:
+      context: ..
+      dockerfile: services/ddu-audio/Dockerfile
+    container_name: ddu-audio
+    networks: [ddu-net]
+    ports: ["8104:8104"]
+    environment:
+      <<: *py-env
+      PORT: 8104
+    restart: unless-stopped
+
+  ddu-geo:
+    build:
+      context: ..
+      dockerfile: services/ddu-geo/Dockerfile
+    container_name: ddu-geo
+    networks: [ddu-net]
+    ports: ["8105:8105"]
+    environment:
+      <<: *py-env
+      PORT: 8105
+    restart: unless-stopped
+
+  ddu-ontology:
+    build:
+      context: ..
+      dockerfile: services/ddu-ontology/Dockerfile
+    container_name: ddu-ontology
+    networks: [ddu-net]
+    ports: ["8107:8107"]
+    environment:
+      <<: *py-env
+      PORT: 8107
+    depends_on: [ddu-graph-store]
+    restart: unless-stopped
+
+  ddu-temporal:
+    build:
+      context: ..
+      dockerfile: services/ddu-temporal/Dockerfile
+    container_name: ddu-temporal
+    networks: [ddu-net]
+    ports: ["8108:8108"]
+    environment:
+      <<: *py-env
+      PORT: 8108
+    depends_on: [ddu-graph-store]
+    restart: unless-stopped
+
+  ddu-agent:
+    build:
+      context: ..
+      dockerfile: services/ddu-agent/Dockerfile
+    container_name: ddu-agent
+    networks: [ddu-net]
+    ports: ["8109:8109"]
+    environment:
+      <<: *py-env
+      PORT: 8109
+      DDU_VISION_URL: http://ddu-vision:8101
+      DDU_OCR_URL: http://ddu-ocr:8103
+      DDU_GEO_URL: http://ddu-geo:8105
+      DDU_ONTOLOGY_URL: http://ddu-ontology:8107
+    restart: unless-stopped
+
+  ddu-osint:
+    build:
+      context: ..
+      dockerfile: services/ddu-osint/Dockerfile
+    container_name: ddu-osint
+    networks: [ddu-net]
+    ports: ["8110:8110"]
+    environment:
+      <<: *py-env
+      PORT: 8110
+    restart: unless-stopped
+
+  ddu-resolution:
+    build:
+      context: ..
+      dockerfile: services/ddu-resolution/Dockerfile
+    container_name: ddu-resolution
+    networks: [ddu-net]
+    ports: ["8111:8111"]
+    environment:
+      <<: *py-env
+      PORT: 8111
+    depends_on: [ddu-graph-store]
+    restart: unless-stopped
+
+  ddu-intel:
+    build:
+      context: ..
+      dockerfile: services/ddu-intel/Dockerfile
+    container_name: ddu-intel
+    networks: [ddu-net]
+    ports: ["8112:8112"]
+    environment:
+      <<: *py-env
+      PORT: 8112
+      DDU_WEBCAPTURE_URL: http://ddu-webcapture:8007
+    depends_on: [ddu-graph-store]
+    restart: unless-stopped
+
+  ddu-api:
+    build:
+      context: ..
+      dockerfile: services/ddu-api/Dockerfile
+    container_name: ddu-api
+    networks: [ddu-net]
+    ports: ["8001:8001"]
+    environment:
+      <<: *go-env
+      PORT: 8001
+      DDU_INGEST_URL: http://ddu-ingest:8002
+      DDU_STORAGE_URL: http://ddu-storage:8003
+      DDU_GRAPH_STORE_URL: http://ddu-graph-store:8004
+      DDU_VECTOR_URL: http://ddu-vector:8005
+      DDU_LINEAGE_URL: http://ddu-lineage:8006
+      DDU_WEBCAPTURE_URL: http://ddu-webcapture:8007
+      DDU_COLLECTOR_URL: http://ddu-collector:8008
+      DDU_DISCOVERY_URL: http://ddu-discovery:8009
+      DDU_VISION_URL: http://ddu-vision:8101
+      DDU_FACE_URL: http://ddu-face:8102
+      DDU_OCR_URL: http://ddu-ocr:8103
+      DDU_AUDIO_URL: http://ddu-audio:8104
+      DDU_GEO_URL: http://ddu-geo:8105
+      DDU_ONTOLOGY_URL: http://ddu-ontology:8107
+      DDU_TEMPORAL_URL: http://ddu-temporal:8108
+      DDU_AGENT_URL: http://ddu-agent:8109
+      DDU_OSINT_URL: http://ddu-osint:8110
+      DDU_RESOLUTION_URL: http://ddu-resolution:8111
+      DDU_INTEL_URL: http://ddu-intel:8112
+    depends_on:
+      - ddu-ingest
+      - ddu-graph-store
+      - ddu-storage
+      - ddu-intel
+    restart: unless-stopped
