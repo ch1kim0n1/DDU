@@ -1,0 +1,190 @@
+{
+  "version": 1,
+  "description": "Engineer C pre-computed Grounded-SAM-2 + GeoCLIP results keyed by sha256 of curated demo JPEGs. Disclose on stage.",
+  "entries": {
+    "34dbbb9b244a4c1ce3a7af9b732311bbf7a31e99ff87523a7f089db9675f085d": {
+      "slug": "vacation_plate",
+      "filename": "demo_vacation_plate.jpg",
+      "label": "Vacation driveway photo",
+      "description": "Residential GPS + visible license plate \u2014 the visceral EXIF + object hit.",
+      "platform": "instagram",
+      "objects": [
+        {
+          "prompt": "license plate",
+          "label": "License plate visible in vacation photo",
+          "detail": "Grounded-SAM-2 text prompt 'license plate' matched a rear plate in frame.",
+          "confidence": 0.91,
+          "severity_base": 0.85,
+          "bbox": [
+            0.62,
+            0.71,
+            0.18,
+            0.08
+          ]
+        },
+        {
+          "prompt": "house number",
+          "label": "House number readable on facade",
+          "detail": "Street-facing house number is legible at full resolution.",
+          "confidence": 0.84,
+          "severity_base": 0.7,
+          "bbox": [
+            0.22,
+            0.38,
+            0.12,
+            0.06
+          ]
+        }
+      ],
+      "geo": [
+        {
+          "rank": 1,
+          "label": "Central East Austin residential block",
+          "confidence": 0.61,
+          "severity_base": 0.72
+        },
+        {
+          "rank": 2,
+          "label": "South Congress corridor (Austin, TX)",
+          "confidence": 0.44,
+          "severity_base": 0.55
+        }
+      ],
+      "face_boxes": [
+        {
+          "x": 0.4,
+          "y": 0.18,
+          "w": 0.16,
+          "h": 0.2,
+          "confidence": 0.93
+        }
+      ],
+      "notes": "Pre-computed offline. Demo upload must hit this hash."
+    },
+    "33b0e180cb5885d4dfddc2b9670f3ae1bdfdbf7e76335554d44164665dc748fd": {
+      "slug": "badge_selfie",
+      "filename": "demo_badge_selfie.jpg",
+      "label": "Office badge selfie",
+      "description": "Workplace GPS + employee badge object exposure.",
+      "platform": "linkedin",
+      "objects": [
+        {
+          "prompt": "badge",
+          "label": "Employee badge readable in selfie",
+          "detail": "Text-prompt detection for 'badge' matched an ID card in the lower frame.",
+          "confidence": 0.88,
+          "severity_base": 0.8,
+          "bbox": [
+            0.55,
+            0.62,
+            0.22,
+            0.18
+          ]
+        }
+      ],
+      "geo": [
+        {
+          "rank": 1,
+          "label": "SoMa office cluster, San Francisco",
+          "confidence": 0.58,
+          "severity_base": 0.68
+        }
+      ],
+      "face_boxes": [
+        {
+          "x": 0.35,
+          "y": 0.12,
+          "w": 0.28,
+          "h": 0.34,
+          "confidence": 0.97
+        },
+        {
+          "x": 0.7,
+          "y": 0.4,
+          "w": 0.12,
+          "h": 0.14,
+          "confidence": 0.71
+        }
+      ],
+      "notes": "Pre-computed offline. Demo upload must hit this hash."
+    },
+    "be2158fb329a73cdbd0f5ef89374f2730e19bf063002bbb09780a31676ad133e": {
+      "slug": "stripped_street",
+      "filename": "demo_stripped_street.jpg",
+      "label": "EXIF-stripped street scene",
+      "description": "No GPS in file \u2014 GeoCLIP hypotheses still fire (platform-stripped complement).",
+      "platform": "x",
+      "objects": [
+        {
+          "prompt": "street sign",
+          "label": "Street sign text visible",
+          "detail": "Signage narrows the block even without metadata.",
+          "confidence": 0.86,
+          "severity_base": 0.65,
+          "bbox": [
+            0.48,
+            0.2,
+            0.25,
+            0.12
+          ]
+        }
+      ],
+      "geo": [
+        {
+          "rank": 1,
+          "label": "Brooklyn brownstone streetscape",
+          "confidence": 0.57,
+          "severity_base": 0.7
+        },
+        {
+          "rank": 2,
+          "label": "Park Slope / Prospect Heights area",
+          "confidence": 0.41,
+          "severity_base": 0.55
+        }
+      ],
+      "face_boxes": [],
+      "notes": "Pre-computed offline. Demo upload must hit this hash."
+    },
+    "59f01de0a8d79aca3ca7756f7fa86d48488b9b71c51816e8286d2cc97448a5c4": {
+      "slug": "home_backyard",
+      "filename": "demo_home_backyard.jpg",
+      "label": "Backyard evening photo",
+      "description": "Home GPS + mailbox object \u2014 stalker-persona critical.",
+      "platform": "facebook",
+      "objects": [
+        {
+          "prompt": "mailbox",
+          "label": "Residential mailbox in frame",
+          "detail": "Property-adjacent objects help confirm a home address when combined with GPS.",
+          "confidence": 0.8,
+          "severity_base": 0.7,
+          "bbox": [
+            0.1,
+            0.55,
+            0.15,
+            0.2
+          ]
+        }
+      ],
+      "geo": [
+        {
+          "rank": 1,
+          "label": "Central Phoenix residential tract",
+          "confidence": 0.52,
+          "severity_base": 0.75
+        }
+      ],
+      "face_boxes": [
+        {
+          "x": 0.6,
+          "y": 0.25,
+          "w": 0.14,
+          "h": 0.18,
+          "confidence": 0.9
+        }
+      ],
+      "notes": "Pre-computed offline. Demo upload must hit this hash."
+    }
+  }
+}

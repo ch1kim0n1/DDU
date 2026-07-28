@@ -50,6 +50,31 @@ the LLM layer to a deterministic offline provider; missing `HIBP_API_KEY` and
 missing `sherlock` fall back to cached demo data. All three states are
 disclosed in the response payloads rather than hidden — see *Honesty flags*.
 
+## Engineer C — Vision & Biometrics
+
+Full documentation: [`docs/engineer-c-vision-biometrics.md`](../../docs/engineer-c-vision-biometrics.md).
+
+```bash
+# Curated demo JPEGs + hash cache ship in mirror_intel/data/vision_cache/
+# Regenerate (optional):
+pip install -e '.[vision-assets]'
+python scripts/generate_vision_demo_assets.py
+```
+
+| Endpoint | Role |
+|---|---|
+| `POST /intel/vision/analyze` | EXIF + hash-cached SAM-2/GeoCLIP → ingest |
+| `GET  /intel/vision/demos` | List curated demo assets |
+| `GET  /intel/vision/demos/{slug}` | Download a demo JPEG |
+| `POST /intel/vision/redaction-preview` | Face boxes / blur advice |
+| `POST /intel/vision/face/enroll` | Closed-corpus enroll (verified avatar / upload) |
+| `POST /intel/vision/face/match` | Face-link findings (closed corpus only) |
+| `POST /intel/vision/liveness/start\|complete\|skip` | Client FaceMesh challenge + skip path |
+
+UI drop-ins: `ui/ddu-ui/src/LivenessChallenge.tsx`, `VisionPanel.tsx`.
+
+Tests: `pytest services/ddu-mirror-intel/test_vision_engineer_c.py -q`
+
 | Env var | Effect |
 |---|---|
 | `ANTHROPIC_API_KEY` | Enables real model calls. Absent → offline provider. |
@@ -62,6 +87,7 @@ disclosed in the response payloads rather than hidden — see *Honesty flags*.
 | `MIRROR_IDENTITY_REQUIRED=1` | Requires a signed OIDC/service identity assertion. |
 | `MIRROR_REQUIRE_LIVE_PROVIDERS=1` | Refuses cached HIBP/Sherlock fallbacks. |
 | `MIRROR_REQUIRE_ELEVENLABS=1` | Makes both ElevenLabs STT and TTS deployment requirements. |
+| `COMPREFACE_URL` / `COMPREFACE_API_KEY` | Optional live face detect; closed-corpus match works without them. |
 
 ---
 

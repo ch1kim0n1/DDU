@@ -44,12 +44,14 @@ from .records import jurisdictions, personalize
 from .remediation import build_checklist
 from .schema import CONTRACT_VERSION, Finding, Origin
 from .session import SessionConflictError, store
+from .vision.routes import cleanup_session_vision, router as vision_router
 from .voice import VoiceConfigurationError, answer_turn
 from .workflow import WorkflowDecisionError, runtime
 
 log = logging.getLogger("mirror-intel.api")
 
 router = APIRouter(prefix="/intel", tags=["mirror-intel"])
+router.include_router(vision_router)
 
 load_persona_weights()
 _suppress_broadcast: ContextVar[bool] = ContextVar(
@@ -336,6 +338,7 @@ async def wipe_session(session_id: str) -> dict[str, Any]:
     )
     store.drop(session_id)
     orch.drop_session(session_id)
+    cleanup_session_vision(session_id)
     return {"destroyed": counts, "action_log": tail, "action_log_summary": summary}
 
 

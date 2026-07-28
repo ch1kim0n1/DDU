@@ -218,6 +218,18 @@ can be mapped back without the model learning the real id.
 
 ---
 
+## Producer notes — Engineer C (vision)
+
+Vision findings enter through `POST /intel/findings/ingest` (or the convenience
+wrapper `POST /intel/vision/analyze`). Rules that must hold:
+
+* `gps_exposure` / `device_fingerprint` — live EXIF; coords vaulted behind reveal tokens
+* `object_exposure` — Grounded-SAM-2 **pre-computed**, method discloses cache
+* `location_inference` — GeoCLIP **pre-computed**, always `verification_state=hypothesis`
+* `face_link` — closed corpus only (verified avatars + user uploads); never open-web
+
+---
+
 ## Changelog
 
 ### 1.0.0 — 2026-07-27

@@ -9,13 +9,16 @@ description = "DDU Mirror — discovery, intelligence, and human-in-the-loop age
 requires-python = ">=3.11"
 dependencies = [
     "ddu-py-common==0.0.1",
+    "exifread==3.0.0",
     "fastapi==0.136.3",
     "httpx==0.28.1",
     "langgraph==1.2.9",
     "langgraph-checkpoint-redis==0.5.1",
     "langgraph-checkpoint-sqlite==3.1.0",
+    "Pillow==11.3.0",
     "pydantic==2.13.4",
     "PyJWT[crypto]==2.13.0",
+    "python-multipart==0.0.20",
     "redis==7.2.2",
     "uvicorn[standard]==0.44.0",
 ]
@@ -28,6 +31,8 @@ dependencies = [
 [project.optional-dependencies]
 llm = ["anthropic==0.116.0"]
 discovery = ["sherlock-project==0.15.0"]
+# Only needed to regenerate curated demo JPEGs with GPS EXIF.
+vision-assets = ["piexif==1.1.3"]
 
 [tool.setuptools]
 py-modules = ["app"]
@@ -36,4 +41,4 @@ py-modules = ["app"]
 include = ["mirror_intel*"]
 
 [tool.setuptools.package-data]
-mirror_intel = ["data/*.json"]
+mirror_intel = ["data/*.json", "data/vision_cache/*"]

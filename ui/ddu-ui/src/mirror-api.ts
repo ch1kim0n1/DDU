@@ -39,6 +39,57 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function requestForm<T>(path: string, form: FormData): Promise<T> {
+  const token = identityToken();
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      ...(token ? {Authorization: `Bearer ${token}`} : {}),
+    },
+    body: form,
+  });
+  if (!response.ok) {
+    let detail = response.statusText;
+    try {
+      const body = (await response.json()) as {detail?: unknown};
+      detail =
+        typeof body.detail === "string"
+          ? body.detail
+          : JSON.stringify(body.detail || body);
+    } catch {
+      detail = await response.text();
+    }
+    throw new Error(detail || `Mirror API returned ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+export type VisionDemoAsset = {
+  sha256: string;
+  slug?: string;
+  filename?: string;
+  label?: string;
+  description?: string;
+  platform?: string | null;
+  has_objects?: boolean;
+  has_geo?: boolean;
+  face_boxes?: number;
+};
+
+export type VisionAnalyzeResult = {
+  session_id: string;
+  sha256: string;
+  cache_hit: boolean;
+  elapsed_ms: number;
+  within_two_seconds: boolean;
+  exif: {has_gps: boolean; has_device: boolean; datetime_original?: string | null};
+  disclosures: string[];
+  redaction_preview: {face_count: number; advice: string; boxes?: unknown[]};
+  accepted: SessionSnapshot["findings"];
+  score: SessionSnapshot["score"];
+  snapshot: SessionSnapshot;
+};
+
 export const mirrorApi = {
   health: () => request<{state: string; service: string}>("/healthz"),
 
@@ -144,6 +195,65 @@ export const mirrorApi = {
         mode: input.mode || "question",
       }),
     }),
+
+  visionDemos: () =>
+    request<{count: number; assets: VisionDemoAsset[]; note: string}>("/intel/vision/demos"),
+
+  fetchDemoFile: async (slug: string) => {
+    const response = await fetch(
+      `${BASE_URL}/intel/vision/demos/${encodeURIComponent(slug)}`,
+    );
+    if (!response.ok) throw new Error(`Demo asset ${slug} unavailable`);
+    const blob = await response.blob();
+    return new File([blob], `${slug}.jpg`, {type: "image/jpeg"});
+  },
+
+  visionAnalyze: (sessionId: string, file: File, platform = "upload") => {
+    const form = new FormData();
+    form.append("session_id", sessionId);
+    form.append("platform", platform);
+    form.append("file", file);
+    return requestForm<VisionAnalyzeResult>("/intel/vision/analyze", form);
+  },
+
+  livenessStart: (sessionId: string, challenge?: string) =>
+    request<{
+      challenge_id: string;
+      challenge: string;
+      instructions: string;
+      privacy: string;
+    }>("/intel/vision/liveness/start", {
+      method: "POST",
+      body: JSON.stringify({session_id: sessionId, challenge}),
+    }),
+
+  livenessComplete: (
+    sessionId: string,
+    challengeId: string,
+    clientPassed: boolean,
+    frame?: Blob | null,
+  ) => {
+    const form = new FormData();
+    form.append("session_id", sessionId);
+    form.append("challenge_id", challengeId);
+    form.append("client_passed", clientPassed ? "true" : "false");
+    if (frame) form.append("file", frame, "liveness.jpg");
+    return requestForm<{
+      passed: boolean;
+      skipped: boolean;
+      has_frame: boolean;
+      template_ttl_seconds_remaining: number | null;
+    }>("/intel/vision/liveness/complete", form);
+  },
+
+  livenessSkip: (sessionId: string) =>
+    request<{skipped: boolean; dangling_state: boolean; corpus_cleared: number}>(
+      "/intel/vision/liveness/skip",
+      {
+        method: "POST",
+        body: JSON.stringify({session_id: sessionId}),
+      },
+    ),
 };
 
 export function websocketURL(sessionId: string) {

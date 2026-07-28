@@ -10,6 +10,7 @@ import type {
   SessionSnapshot,
   SimulationResult,
 } from "./mirror-types";
+import {VisionPanel} from "./VisionPanel";
 import {VoicePanel} from "./VoicePanel";
 
 const PERSONAS = [
@@ -425,6 +426,18 @@ export default function App() {
           </div>
 
           <aside className="control-rail">
+            <VisionPanel
+              busy={Boolean(busy)}
+              onPayoff={({preferredView, focusFinding}) => {
+                setView(preferredView);
+                if (focusFinding) setSelected(focusFinding);
+              }}
+              onSnapshot={setSnapshot}
+              sessionId={snapshot.session_id}
+              setBusy={setBusy}
+              setError={setError}
+            />
+
             <section className="rail-section approval-queue">
               <div className="rail-title">
                 <div>
