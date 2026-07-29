@@ -6,7 +6,7 @@ require (
 	github.com/ddu/ddu-contracts v0.0.0
 	github.com/ddu/ddu-httpclient v0.0.0
 	github.com/ddu/ddu-lineage-emitter v0.0.0
-	github.com/go-chi/chi/v5 v5.2.5
+	github.com/go-chi/chi/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 )
 
