@@ -1,0 +1,18 @@
+# Shared Ruff config for DDU Python services and libs.
+# CI currently runs: ruff check <module> --select E9,F63,F7,F82
+# Expand gradually; keep the gate green.
+
+target-version = "py311"
+line-length = 100
+
+[lint]
+select = [
+  "E9",   # runtime syntax errors
+  "F63",  # invalid print syntax
+  "F7",   # syntax errors in __future__
+  "F82",  # undefined names
+]
+ignore = []
+
+[lint.per-file-ignores]
+"**/test_*.py" = []

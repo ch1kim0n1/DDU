@@ -40,6 +40,10 @@ export function LivenessChallenge({
   const [error, setError] = useState("");
   const [ttl, setTtl] = useState<number | null>(null);
   const [mediapipeReady, setMediapipeReady] = useState(false);
+  const [cameraHint, setCameraHint] = useState(
+    "Click below to allow camera access. The video never leaves your browser.",
+  );
+  const [biometricConsent, setBiometricConsent] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef(0);
   const landmarkerRef = useRef<{
@@ -146,10 +150,38 @@ export function LivenessChallenge({
   }
 
   async function start() {
+    if (!biometricConsent) {
+      setError("Confirm biometric consent before starting the camera.");
+      return;
+    }
     setError("");
     setPhase("starting");
     progressRef.current = {blinks: 0, yawSamples: 0};
     try {
+      if (navigator.permissions?.query) {
+        try {
+          const status = await navigator.permissions.query({
+            name: "camera" as PermissionName,
+          });
+          if (status.state === "denied") {
+            setCameraHint(
+              "Camera access is blocked. Enable it in your browser settings (click the camera icon in the address bar) and try again.",
+            );
+            setPhase("idle");
+            setError(
+              "Camera access is blocked. Enable it in your browser settings (click the camera icon in the address bar) and try again.",
+            );
+            return;
+          }
+          if (status.state === "prompt") {
+            setCameraHint(
+              "Click below to allow camera access. The video never leaves your browser.",
+            );
+          }
+        } catch {
+          // permissions.query for camera is not supported everywhere
+        }
+      }
       const started = await mirrorApi.livenessStart(sessionId);
       setChallengeId(started.challenge_id);
       setChallenge(started.challenge as LivenessChallengeKind);
@@ -190,7 +222,16 @@ export function LivenessChallenge({
     } catch (reason) {
       stopCamera();
       setPhase("idle");
-      setError(reason instanceof Error ? reason.message : "Could not start liveness");
+      const err = reason as DOMException;
+      if (err?.name === "NotAllowedError") {
+        setError(
+          "Camera access is blocked. Enable it in your browser settings (click the camera icon in the address bar) and try again.",
+        );
+      } else if (err?.name === "NotFoundError") {
+        setError("No camera detected on this device.");
+      } else {
+        setError(reason instanceof Error ? reason.message : "Could not start liveness");
+      }
     }
   }
 
@@ -211,9 +252,19 @@ export function LivenessChallenge({
         <p className="eyebrow">Biometric step-up, optional</p>
         <h3>Live face check</h3>
         <p>
-          FaceMesh runs in your browser. Only one verified frame uploads after
-          you pass - never a video stream.
+          Your face data is processed locally in your browser and never uploaded
+          as a video stream. It is destroyed when you close this panel. Only one
+          verified frame may upload after you pass.
         </p>
+        <p className="liveness-hint">{cameraHint}</p>
+        <label className="liveness-consent">
+          <input
+            type="checkbox"
+            checked={biometricConsent}
+            onChange={(e) => setBiometricConsent(e.target.checked)}
+          />
+          I consent to biometric processing for liveness verification
+        </label>
       </header>
 
       <div className="liveness-stage">

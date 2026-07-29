@@ -9,8 +9,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import {useState} from "react";
+import {memo, useRef, useState} from "react";
 
+import {useFocusTrap} from "./focusTrap";
 import {mirrorApi} from "./mirror-api";
 import type {
   Finding,
@@ -26,15 +27,7 @@ const SEVERITY_COLORS: Record<string, string> = {
   info: "#718096",
 };
 
-export function EvidenceDrawer({
-  finding,
-  sessionId,
-  score,
-  attribution,
-  onClose,
-  onReject,
-  rejecting,
-}: {
+type EvidenceDrawerProps = {
   finding: Finding | null;
   sessionId: string;
   score: ScoreBreakdown;
@@ -42,9 +35,22 @@ export function EvidenceDrawer({
   onClose: () => void;
   onReject: (finding: Finding) => void;
   rejecting: boolean;
-}) {
+};
+
+function EvidenceDrawerComponent({
+  finding,
+  sessionId,
+  score,
+  attribution,
+  onClose,
+  onReject,
+  rejecting,
+}: EvidenceDrawerProps) {
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [revealError, setRevealError] = useState("");
+  const drawerRef = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useFocusTrap(drawerRef, Boolean(finding), onClose, closeRef);
 
   if (!finding) return null;
 
@@ -67,7 +73,13 @@ export function EvidenceDrawer({
   }
 
   return (
-    <aside className="evidence-drawer" aria-label="Evidence details">
+    <aside
+      ref={drawerRef}
+      className="evidence-drawer"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Evidence details"
+    >
       <div className="drawer-handle" />
       <div className="drawer-header">
         <div>
@@ -81,7 +93,12 @@ export function EvidenceDrawer({
             <span className="data-tag mock">MOCK</span>
           )}
         </div>
-        <button className="icon-button" onClick={onClose} aria-label="Close evidence drawer">
+        <button
+          ref={closeRef}
+          className="icon-button"
+          onClick={onClose}
+          aria-label="Close evidence drawer"
+        >
           X
         </button>
       </div>
@@ -240,3 +257,12 @@ export function EvidenceDrawer({
     </aside>
   );
 }
+
+export const EvidenceDrawer = memo(EvidenceDrawerComponent, (prev, next) => {
+  return (
+    prev.finding?.id === next.finding?.id &&
+    prev.finding?.verification_state === next.finding?.verification_state &&
+    prev.rejecting === next.rejecting &&
+    Boolean(prev.finding) === Boolean(next.finding)
+  );
+});

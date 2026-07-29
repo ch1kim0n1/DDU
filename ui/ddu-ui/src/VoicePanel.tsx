@@ -1,5 +1,6 @@
 import {useRef, useState} from "react";
 
+import {useFocusTrap} from "./focusTrap";
 import {mirrorApi} from "./mirror-api";
 import type {VoiceTurnResult} from "./mirror-types";
 
@@ -21,11 +22,19 @@ export function VoicePanel({
 }) {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const panelRef = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const [recording, setRecording] = useState(false);
   const [question, setQuestion] = useState("");
   const [result, setResult] = useState<VoiceTurnResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [micAvailable, setMicAvailable] = useState(() =>
+    typeof navigator !== "undefined" &&
+    Boolean(navigator.mediaDevices?.getUserMedia),
+  );
+  const speechSupported = typeof window !== "undefined" && "speechSynthesis" in window;
+  useFocusTrap(panelRef, true, onClose, closeRef);
 
   function play(resultData: VoiceTurnResult) {
     if (resultData.audio_base64 && resultData.audio_mime) {
@@ -35,7 +44,7 @@ export function VoicePanel({
       void audio.play();
       return;
     }
-    if ("speechSynthesis" in window) {
+    if (speechSupported) {
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(new SpeechSynthesisUtterance(resultData.answer));
     }
@@ -54,7 +63,14 @@ export function VoicePanel({
       setResult(next);
       play(next);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Voice turn failed");
+      const message = reason instanceof Error ? reason.message : "Voice turn failed";
+      if (message.includes("503") || message.toLowerCase().includes("unavailable")) {
+        setError(
+          "Voice assistant is temporarily unavailable. You can still type your question.",
+        );
+      } else {
+        setError(message);
+      }
     } finally {
       setBusy(false);
     }
@@ -85,12 +101,19 @@ export function VoicePanel({
       recorderRef.current = recorder;
       setRecording(true);
     } catch {
+      setMicAvailable(false);
       setError("Microphone permission was not granted. Type a question instead.");
     }
   }
 
   return (
-    <aside className="voice-panel" aria-label="Voice assistant">
+    <aside
+      ref={panelRef}
+      className="voice-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Voice assistant"
+    >
       <header>
         <div>
           <span className="voice-wave" aria-hidden="true">
@@ -104,7 +127,12 @@ export function VoicePanel({
             <small>PII-scrubbed, session grounded</small>
           </div>
         </div>
-        <button className="icon-button" onClick={onClose} aria-label="Close voice panel">
+        <button
+          ref={closeRef}
+          className="icon-button"
+          onClick={onClose}
+          aria-label="Close voice panel"
+        >
           X
         </button>
       </header>
@@ -116,15 +144,21 @@ export function VoicePanel({
             any text reaches the reasoning or speech layer.
           </p>
         </div>
-        <button
-          className={`record-button ${recording ? "recording" : ""}`}
-          disabled={busy}
-          onClick={() => void toggleRecording()}
-          type="button"
-        >
-          <span />
-          {recording ? "Stop & scrub" : busy ? "Grounding answer..." : "Ask with voice"}
-        </button>
+        {micAvailable ? (
+          <button
+            className={`record-button ${recording ? "recording" : ""}`}
+            disabled={busy}
+            onClick={() => void toggleRecording()}
+            type="button"
+          >
+            <span />
+            {recording ? "Stop & scrub" : busy ? "Grounding answer..." : "Ask with voice"}
+          </button>
+        ) : (
+          <p className="inline-error" role="status">
+            Microphone is not available in this browser. Use the text input below.
+          </p>
+        )}
         <div className="voice-divider">
           <span>or type locally</span>
         </div>
@@ -166,6 +200,9 @@ export function VoicePanel({
             </div>
             {result.transcript && <q>{result.transcript}</q>}
             <p>{result.answer}</p>
+            {!speechSupported && !result.audio_base64 ? (
+              <small>Audio playback is not supported in this browser.</small>
+            ) : null}
             <small>
               Grounded in {result.grounded_finding_ids.length} live, non-rejected
               findings.

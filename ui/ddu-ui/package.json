@@ -6,26 +6,37 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --host 0.0.0.0 --port 5173"
+    "preview": "vite preview --host 0.0.0.0 --port 5173",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "playwright test",
+    "bundle:analyze": "vite-bundle-visualizer"
   },
   "dependencies": {
-    "@mediapipe/tasks-vision": "^0.10.21",
-    "@react-three/drei": "^10.7.7",
-    "@react-three/fiber": "^9.6.1",
-    "cytoscape": "^3.30.2",
-    "gsap": "^3.13.0",
-    "maplibre-gl": "^4.7.0",
+    "@mediapipe/tasks-vision": "0.10.21",
+    "@react-three/drei": "10.7.7",
+    "@react-three/fiber": "9.6.1",
+    "@sentry/react": "9.40.0",
+    "cytoscape": "3.34.0",
+    "gsap": "3.13.0",
+    "maplibre-gl": "4.7.1",
     "react": "19.2.6",
     "react-dom": "19.2.6",
-    "recharts": "^3.10.1",
-    "three": "^0.185.1"
+    "recharts": "3.10.1",
+    "three": "0.185.1"
   },
   "devDependencies": {
-    "@types/cytoscape": "^3.21.7",
+    "@playwright/test": "1.62.0",
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.3.0",
+    "@types/cytoscape": "3.21.9",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "^6.0.4",
-    "typescript": "^5.9.3",
-    "vite": "^8.1.5"
+    "@vitejs/plugin-react": "6.0.4",
+    "jsdom": "26.1.0",
+    "typescript": "5.9.3",
+    "vite": "8.1.5",
+    "vite-bundle-visualizer": "1.2.1",
+    "vitest": "3.2.7"
   }
 }

@@ -1,0 +1,82 @@
+# Production stack: Caddy (TLS) + mirror-intel + frontend + Redis + Prometheus scrape target.
+# Usage:
+#   export DOMAIN=yourdomain.example
+#   docker compose -f infra/docker-compose.prod.yml up -d
+
+services:
+  caddy:
+    image: caddy:2.9.1-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - mirror-intel
+      - frontend
+
+  mirror-intel:
+    build:
+      context: ..
+      dockerfile: services/ddu-mirror-intel/Dockerfile
+    restart: unless-stopped
+    environment:
+      MIRROR_ENV: production
+      MIRROR_INTEL_PORT: "8120"
+      MIRROR_IDENTITY_REQUIRED: "1"
+      MIRROR_REDIS_URL: ${MIRROR_REDIS_URL:-redis://:ddudevpass@redis:6379/0}
+      MIRROR_SESSION_ENCRYPTION_KEY: ${MIRROR_SESSION_ENCRYPTION_KEY:?set encryption key}
+      MIRROR_UI_ORIGIN_REGEX: ${MIRROR_UI_ORIGIN_REGEX:-^https://yourdomain\\.example$}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      ELEVENLABS_VOICE_ID: ${ELEVENLABS_VOICE_ID:-}
+      COMPREFACE_URL: ${COMPREFACE_URL:-}
+      COMPREFACE_API_KEY: ${COMPREFACE_API_KEY:-}
+    depends_on:
+      - redis
+    expose:
+      - "8120"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8120/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: ../ui/ddu-ui
+      dockerfile: Dockerfile
+      args:
+        VITE_MIRROR_API_URL: ""
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+    restart: unless-stopped
+    expose:
+      - "80"
+
+  redis:
+    image: redis:7.2.2-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-ddudevpass}"]
+    volumes:
+      - redis_data:/data
+    expose:
+      - "6379"
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.prod.yml:/etc/prometheus/prometheus.yml:ro
+    expose:
+      - "9090"
+    depends_on:
+      - mirror-intel
+
+volumes:
+  caddy_data:
+  caddy_config:
+  redis_data:

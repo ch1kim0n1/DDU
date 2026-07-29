@@ -1,0 +1,36 @@
+# Staging mirrors production with self-signed TLS and stub-friendly defaults.
+services:
+  caddy:
+    image: caddy:2.9.1-alpine
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - ./Caddyfile.staging:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - mirror-intel
+      - frontend
+
+  mirror-intel:
+    build:
+      context: ..
+      dockerfile: services/ddu-mirror-intel/Dockerfile
+    environment:
+      MIRROR_ENV: staging
+      MIRROR_RATE_LIMIT: "0"
+      MIRROR_FORCE_OFFLINE: "1"
+      MIRROR_INTEL_PORT: "8120"
+      MIRROR_UI_ORIGIN_REGEX: "^https?://(localhost|127\\.0\\.0\\.1)(:\\d+)?$"
+    expose:
+      - "8120"
+
+  frontend:
+    build:
+      context: ../ui/ddu-ui
+      dockerfile: Dockerfile
+    expose:
+      - "80"
+
+volumes:
+  caddy_data:

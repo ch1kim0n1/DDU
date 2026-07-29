@@ -1,4 +1,7 @@
-import {useState} from "react";
+import {useEffect, useRef, useState} from "react";
+
+import {track} from "./analytics";
+import {useFocusTrap} from "./focusTrap";
 
 export interface OnboardingData {
   emails: string[];
@@ -9,6 +12,9 @@ export interface OnboardingData {
   county: string;
   guess: string;
 }
+
+const WIZARD_KEY = "ddu.wizardData";
+const WIZARD_MAX_AGE_MS = 10 * 60 * 1000;
 
 interface OnboardingWizardProps {
   onComplete: (data: OnboardingData) => void;
@@ -48,6 +54,10 @@ const US_STATES = [
 ];
 
 export function OnboardingWizard({onComplete, onCancel, busy, error}: OnboardingWizardProps) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useFocusTrap(cardRef, true, onCancel, closeRef);
+
   const [step, setStep] = useState(0);
   const [email, setEmail] = useState("");
   const [emails, setEmails] = useState<string[]>([]);
@@ -60,9 +70,72 @@ export function OnboardingWizard({onComplete, onCancel, busy, error}: Onboarding
   const [county, setCounty] = useState("Travis");
   const [guess, setGuess] = useState("");
   const [adult, setAdult] = useState(false);
+  const [legalAck, setLegalAck] = useState(false);
   const [localError, setLocalError] = useState("");
+  const [hydrated, setHydrated] = useState(false);
 
   const totalSteps = 4;
+  const stepLabels = [
+    "Your verified identity",
+    "Threat model",
+    "Context",
+    "Consent",
+  ];
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(WIZARD_KEY);
+      if (!raw) {
+        setHydrated(true);
+        return;
+      }
+      const saved = JSON.parse(raw) as {
+        at: number;
+        step: number;
+        emails: string[];
+        handles: string[];
+        accountUrls: string[];
+        persona: string;
+        state: string;
+        county: string;
+        guess: string;
+      };
+      if (Date.now() - saved.at > WIZARD_MAX_AGE_MS) {
+        sessionStorage.removeItem(WIZARD_KEY);
+      } else {
+        setStep(saved.step || 0);
+        setEmails(saved.emails || []);
+        setHandles(saved.handles || []);
+        setAccountUrls(saved.accountUrls || []);
+        setPersona(saved.persona || "scammer");
+        setState(saved.state || "TX");
+        setCounty(saved.county || "Travis");
+        setGuess(saved.guess || "");
+      }
+    } catch {
+      sessionStorage.removeItem(WIZARD_KEY);
+    }
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    sessionStorage.setItem(
+      WIZARD_KEY,
+      JSON.stringify({
+        at: Date.now(),
+        step,
+        emails,
+        handles,
+        accountUrls,
+        persona,
+        state,
+        county,
+        guess,
+      }),
+    );
+    track("wizard_step", {step: step + 1});
+  }, [hydrated, step, emails, handles, accountUrls, persona, state, county, guess]);
   const canProceed = step === 0
     ? emails.length > 0
     : step === 1
@@ -70,14 +143,20 @@ export function OnboardingWizard({onComplete, onCancel, busy, error}: Onboarding
       : step === 2
         ? Boolean(state)
         : step === 3
-          ? adult
+          ? adult && legalAck
           : false;
 
   function addEmail() {
     const clean = email.trim().toLowerCase();
-    if (!clean || !clean.includes("@") || emails.includes(clean)) return;
+    const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean);
+    if (!valid) {
+      setLocalError("Enter a valid email address.");
+      return;
+    }
+    if (emails.includes(clean)) return;
     setEmails([...emails, clean]);
     setEmail("");
+    setLocalError("");
   }
   function removeEmail(value: string) {
     setEmails(emails.filter((e) => e !== value));
@@ -85,22 +164,37 @@ export function OnboardingWizard({onComplete, onCancel, busy, error}: Onboarding
 
   function addHandle() {
     const clean = handle.trim().replace(/^@/, "").toLowerCase();
-    if (!clean || handles.includes(clean)) return;
+    if (!/^[a-z0-9_]+$/.test(clean)) {
+      setLocalError("Handles may only use letters, numbers, and underscores.");
+      return;
+    }
+    if (handles.includes(clean)) return;
     setHandles([...handles, clean]);
     setHandle("");
+    setLocalError("");
   }
   function removeHandle(value: string) {
     setHandles(handles.filter((h) => h !== value));
   }
 
   function addUrl() {
-    const clean = accountUrl.trim();
-    if (!clean || !clean.startsWith("http") || accountUrls.includes(clean)) return;
+    let clean = accountUrl.trim();
+    if (clean && !/^https?:\/\//i.test(clean)) clean = `https://${clean}`;
+    if (!/^https?:\/\/.+/i.test(clean)) {
+      setLocalError("Profile URL must start with http:// or https://");
+      return;
+    }
+    if (accountUrls.includes(clean)) return;
     setAccountUrls([...accountUrls, clean]);
     setAccountUrl("");
+    setLocalError("");
   }
   function removeUrl(value: string) {
     setAccountUrls(accountUrls.filter((u) => u !== value));
+  }
+
+  function clearWizardStorage() {
+    sessionStorage.removeItem(WIZARD_KEY);
   }
 
   function next() {
@@ -111,49 +205,104 @@ export function OnboardingWizard({onComplete, onCancel, busy, error}: Onboarding
     }
     if (step < totalSteps - 1) setStep(step + 1);
     else {
+      const cleanEmails = emails
+        .map((value) => value.trim().toLowerCase())
+        .filter((value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value));
+      const cleanHandles = handles.map((value) =>
+        value
+          .trim()
+          .replace(/^@/, "")
+          .toLowerCase()
+          .replace(/[^a-z0-9_]/g, ""),
+      ).filter(Boolean);
+      const cleanUrls: string[] = [];
+      for (const raw of accountUrls) {
+        let value = raw.trim();
+        if (!value) continue;
+        if (!/^https?:\/\//i.test(value)) value = `https://${value}`;
+        try {
+          cleanUrls.push(new URL(value).toString());
+        } catch {
+          /* drop invalid */
+        }
+      }
+      const cleanGuess = guess
+        .trim()
+        .replace(/<[^>]*>/g, "")
+        .slice(0, 500);
+      clearWizardStorage();
+      track("wizard_completed", {persona});
       onComplete({
-        emails,
-        handles,
-        accountUrls,
+        emails: cleanEmails,
+        handles: cleanHandles,
+        accountUrls: cleanUrls,
         persona,
         state,
         county: county.trim() || "Travis",
-        guess: guess.trim(),
+        guess: cleanGuess,
       });
     }
   }
 
   function back() {
     setLocalError("");
+    if (step === totalSteps - 1) {
+      // Keep data; user can review before starting.
+      setLocalError("Going back will keep your data. You can review and change before starting.");
+    }
     if (step > 0) setStep(step - 1);
-    else onCancel();
+    else {
+      track("wizard_abandoned", {step: step + 1});
+      clearWizardStorage();
+      onCancel();
+    }
   }
 
   return (
     <div className="wizard-overlay">
-      <div className="wizard-card">
+      <div
+        ref={cardRef}
+        className="wizard-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Onboarding wizard"
+      >
         <div className="wizard-header">
           <span className="wizard-brand">M</span>
           <div>
             <strong>DDU / MIRROR</strong>
             <small>Real discovery onboarding</small>
           </div>
-          <button className="wizard-close" onClick={onCancel} type="button" aria-label="Cancel">
+          <button
+            ref={closeRef}
+            className="wizard-close"
+            onClick={onCancel}
+            type="button"
+            aria-label="Cancel"
+          >
             X
           </button>
         </div>
 
-        <div className="wizard-progress">
+        <div className="wizard-progress" role="list" aria-label="Onboarding progress">
           {Array.from({length: totalSteps}, (_, i) => (
-            <span key={i} className={`wizard-dot ${i === step ? "active" : ""} ${i < step ? "done" : ""}`} />
+            <span
+              key={i}
+              role="listitem"
+              aria-current={i === step ? "step" : undefined}
+              className={`wizard-dot ${i === step ? "active" : ""} ${i < step ? "done" : ""}`}
+            />
           ))}
         </div>
+        <p className="sr-only" aria-live="polite">
+          Step {step + 1} of {totalSteps}: {stepLabels[step]}
+        </p>
 
         <div className="wizard-body">
           {step === 0 && (
             <fieldset className="wizard-step">
               <legend>Step 1 - Your verified identity</legend>
-              <p className="wizard-intro">
+              <p className="wizard-intro" id="wizard-email-help">
                 Enter identifiers you control. DDU Mirror only scans what you
                 can prove is yours. Nothing else.
               </p>
@@ -167,8 +316,11 @@ export function OnboardingWizard({onComplete, onCancel, busy, error}: Onboarding
                     onChange={(e) => setEmail(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addEmail(); } }}
                     placeholder="you@example.com"
+                    aria-describedby="wizard-email-help"
                   />
-                  <button type="button" onClick={addEmail} disabled={!email.trim()}>Add</button>
+                  <button type="button" onClick={addEmail} disabled={!email.trim()}>
+                    Add
+                  </button>
                 </div>
               </label>
               {emails.length > 0 && (
@@ -239,7 +391,7 @@ export function OnboardingWizard({onComplete, onCancel, busy, error}: Onboarding
                 Who are you trying to stay safe from? This shapes how findings
                 are weighted and which attack paths are prioritized.
               </p>
-              <div className="wizard-personas">
+              <div className="wizard-personas" role="radiogroup" aria-label="Threat model persona">
                 {PERSONAS.map((p) => (
                   <label
                     className={`wizard-persona ${persona === p.id ? "selected" : ""}`}
@@ -319,10 +471,32 @@ export function OnboardingWizard({onComplete, onCancel, busy, error}: Onboarding
                 <label className="wizard-adult">
                   <input
                     type="checkbox"
+                    role="checkbox"
+                    aria-checked={adult}
                     checked={adult}
                     onChange={(e) => setAdult(e.target.checked)}
+                    aria-label="I confirm that I am 18 or older and I consent to scanning my own public footprint."
                   />
                   I confirm that I am 18 or older and I consent to scanning my own public footprint.
+                </label>
+                <label className="wizard-adult">
+                  <input
+                    type="checkbox"
+                    role="checkbox"
+                    aria-checked={legalAck}
+                    checked={legalAck}
+                    onChange={(e) => setLegalAck(e.target.checked)}
+                    aria-label="I have read and agree to the Privacy Policy and Terms of Service"
+                  />
+                  I have read and agree to the{" "}
+                  <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer">
+                    Privacy Policy
+                  </a>{" "}
+                  and{" "}
+                  <a href="/terms-of-service.html" target="_blank" rel="noopener noreferrer">
+                    Terms of Service
+                  </a>
+                  .
                 </label>
               </div>
             </fieldset>

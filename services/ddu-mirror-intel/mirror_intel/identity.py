@@ -67,7 +67,6 @@ class IdentityVerifier:
     """Verify RS/ES OIDC tokens from JWKS or internal HS256 assertions."""
 
     def __init__(self) -> None:
-        self.required = _truthy("MIRROR_IDENTITY_REQUIRED")
         self.issuer = os.environ.get("MIRROR_IDENTITY_ISSUER", "").strip()
         self.audience = os.environ.get("MIRROR_IDENTITY_AUDIENCE", "").strip()
         self.jwks_url = os.environ.get("MIRROR_IDENTITY_JWKS_URL", "").strip()
@@ -97,6 +96,11 @@ class IdentityVerifier:
                 "configured identity verification requires MIRROR_IDENTITY_ISSUER "
                 "and MIRROR_IDENTITY_AUDIENCE"
             )
+
+    @property
+    def required(self) -> bool:
+        env = os.environ.get("MIRROR_ENV", "development").strip().lower()
+        return _truthy("MIRROR_IDENTITY_REQUIRED") or env == "production"
 
     @property
     def configured(self) -> bool:

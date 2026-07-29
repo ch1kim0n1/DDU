@@ -1,0 +1,213 @@
+{
+  "last_run": "2026-07-29T09:25:00Z",
+  "verdict": "READY FOR DEMO",
+  "wave2": "code complete — see docs/wave2-coverage.md; ops gates remain (Actions billing, DPAs, staging host)",
+  "release_target": "DDU Mirror (ddu-mirror-intel + ui/ddu-ui) — commercial launch / demo readiness",
+  "ship_decision_applies_to": "services/ddu-mirror-intel, ui/ddu-ui (full platform CI/Go/Python gates verified locally; billing/payments/legal out of scope for demo path)",
+  "surface_map": [
+    {
+      "surface": "Mirror UI",
+      "type": "Web App",
+      "path": "ui/ddu-ui",
+      "user_facing": true,
+      "release_critical": "Yes",
+      "changed": true,
+      "audit_depth": "Full",
+      "blast_radius_upgrade": null
+    },
+    {
+      "surface": "Mirror Intel API",
+      "type": "API",
+      "path": "services/ddu-mirror-intel",
+      "user_facing": true,
+      "release_critical": "Yes",
+      "changed": false,
+      "audit_depth": "Full",
+      "blast_radius_upgrade": null
+    },
+    {
+      "surface": "Platform Go services",
+      "type": "API",
+      "path": "services/ddu-* (Go)",
+      "user_facing": false,
+      "release_critical": "Medium",
+      "changed": false,
+      "audit_depth": "Smoke",
+      "blast_radius_upgrade": null
+    },
+    {
+      "surface": "Platform Python services",
+      "type": "API",
+      "path": "services/ddu-* (Python)",
+      "user_facing": false,
+      "release_critical": "Medium",
+      "changed": false,
+      "audit_depth": "Smoke",
+      "blast_radius_upgrade": null
+    },
+    {
+      "surface": "CI/CD",
+      "type": "CI/CD",
+      "path": ".github/workflows/ci.yml",
+      "user_facing": false,
+      "release_critical": "Yes",
+      "changed": false,
+      "audit_depth": "Full",
+      "blast_radius_upgrade": null
+    },
+    {
+      "surface": "Payment System",
+      "type": "Payment System",
+      "path": "(none)",
+      "user_facing": true,
+      "release_critical": "Yes",
+      "changed": false,
+      "audit_depth": "Skip",
+      "blast_radius_upgrade": "Does not exist — blocks Production Ready for paid launch"
+    }
+  ],
+  "blast_radius": [
+    {
+      "changed_file": "ui/ddu-ui/src/App.tsx",
+      "direct_surface": "Mirror UI",
+      "downstream_surfaces": ["Mirror Intel API"],
+      "risk_level": "Medium",
+      "required_audit_upgrade": "Full"
+    }
+  ],
+  "environment_matrix": {
+    "local": true,
+    "test_ci": false,
+    "staging": false,
+    "production_smoke": false,
+    "staging_gap_rule_triggered": true
+  },
+  "issues_filed": [
+    {
+      "title": "P0: GitHub Actions CI blocked — account payment/spending limit",
+      "severity": "P0",
+      "category": "CI",
+      "github_issue_number": "4",
+      "status": "open"
+    },
+    {
+      "title": "P1: ddu-mirror-intel does not emit OpenLineage events",
+      "severity": "P1",
+      "category": "Bug",
+      "github_issue_number": "5",
+      "status": "open"
+    },
+    {
+      "title": "P1: Production identity gate defaults to off",
+      "severity": "P1",
+      "category": "Security",
+      "github_issue_number": "6",
+      "status": "open"
+    },
+    {
+      "title": "P1: No API rate limiting on expensive Mirror endpoints",
+      "severity": "P1",
+      "category": "Security",
+      "github_issue_number": "7",
+      "status": "open"
+    },
+    {
+      "title": "P1: Missing privacy policy and terms of service for Mirror launch",
+      "severity": "P1",
+      "category": "Privacy",
+      "github_issue_number": "8",
+      "status": "open"
+    }
+  ],
+  "fixes_applied": [
+    {
+      "description": "Removed dead MirrorOnboarding.tsx and mirrorApi.ts (port 8130 leftovers)",
+      "file": "ui/ddu-ui/src/MirrorOnboarding.tsx, ui/ddu-ui/src/mirrorApi.ts",
+      "verified": true
+    },
+    {
+      "description": "Enabled production source maps in Vite build",
+      "file": "ui/ddu-ui/vite.config.ts",
+      "verified": true
+    },
+    {
+      "description": "Defined shared ruff.toml (was TBD in AGENTS.md)",
+      "file": "ruff.toml",
+      "verified": true
+    }
+  ],
+  "claims_tested": [
+    {
+      "claim": "Mock session seeds findings and proposals for demo",
+      "result": "pass"
+    },
+    {
+      "claim": "Approve proposal expands findings",
+      "result": "pass"
+    },
+    {
+      "claim": "Session wipe destroys data and returns counts",
+      "result": "pass"
+    },
+    {
+      "claim": "WebSocket connects for live session",
+      "result": "pass"
+    },
+    {
+      "claim": "WebSocket rejects unknown session_id",
+      "result": "pass"
+    },
+    {
+      "claim": "Cold boot /healthz without env vars",
+      "result": "pass"
+    },
+    {
+      "claim": "Frontend production build + preview serves dist/",
+      "result": "pass"
+    },
+    {
+      "claim": "CI green on main",
+      "result": "fail"
+    },
+    {
+      "claim": "OpenLineage on every invocation",
+      "result": "fail"
+    },
+    {
+      "claim": "Payment / pricing exists",
+      "result": "fail"
+    }
+  ],
+  "critical_path": [
+    "Fix GitHub Actions billing/spending limit and re-run CI (#4)",
+    "Set production identity required + document deploy env (#6)",
+    "Add rate limiting to session/voice/vision/WS (#7)",
+    "Ship Privacy Policy + Terms linked from onboarding (#8)",
+    "Emit OpenLineage from mirror-intel handlers (#5)",
+    "Code-split Three.js/MapLibre/recharts (<300KB initial)",
+    "Pin/upgrade python-multipart and pillow CVEs",
+    "Decide ephemeral vs Redis sessions for prod + frontend refresh recovery",
+    "Deploy path: TLS, CORS allowlist, HTTPS/WSS, hosting"
+  ],
+  "sections_audited": [
+    "Pre-flight",
+    "First Impression",
+    "Setup",
+    "Main User Journey",
+    "Feature Coverage",
+    "Commercial Readiness",
+    "Test Suite",
+    "Security",
+    "Performance",
+    "Release Engineering",
+    "Error Handling (API)",
+    "Consistency"
+  ],
+  "sections_skipped": [
+    "Mobile browser device testing — no physical/device farm this run",
+    "Cross-browser Safari/iOS camera — requires HTTPS deploy",
+    "Payment flow — no payment system exists",
+    "Load testing — deferred to post-demo sprint"
+  ],
+  "diff_scope": "full"
+}

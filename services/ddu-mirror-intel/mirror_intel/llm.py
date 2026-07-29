@@ -29,12 +29,15 @@ instead have their *output* scrubbed on the way back.
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import logging
 import os
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Protocol
+
+LLM_TIMEOUT_SECONDS = float(os.environ.get("MIRROR_LLM_TIMEOUT_SECONDS", "10"))
 
 from .redaction import RedactionViolation, assert_no_raw_pii, scrub_text
 
@@ -216,6 +219,83 @@ def _skeleton_for(schema: dict[str, Any]) -> Any:
     return None
 
 
+class OpenAIProvider:
+    """OpenAI chat completions fallback when Anthropic is unavailable."""
+
+    name = "openai"
+
+    def __init__(self, api_key: str | None = None):
+        from openai import OpenAI  # lazy import
+
+        key = api_key or os.environ.get("OPENAI_API_KEY")
+        if not key:
+            raise RuntimeError("OPENAI_API_KEY not set")
+        self._client = OpenAI(api_key=key)
+
+    def complete(
+        self,
+        messages: list[dict[str, Any]],
+        tier: Tier,
+        system: str | None = None,
+        schema: dict[str, Any] | None = None,
+        max_tokens: int = 2048,
+    ) -> Completion:
+        model = "gpt-4o-mini" if tier in (Tier.VOICE, Tier.QUARANTINE) else "gpt-4o"
+        chat_messages: list[dict[str, Any]] = []
+        if system:
+            chat_messages.append({"role": "system", "content": system})
+        chat_messages.extend(messages)
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": chat_messages,
+            "max_tokens": max_tokens,
+        }
+        if schema:
+            kwargs["response_format"] = {"type": "json_object"}
+        response = self._client.chat.completions.create(**kwargs)
+        text = (response.choices[0].message.content or "") if response.choices else ""
+        return Completion(text=text, tier=tier, model=model, provider=self.name)
+
+
+class FailoverProvider:
+    """Try providers in order; log which one answered."""
+
+    name = "failover"
+
+    def __init__(self, providers: list[Provider]):
+        self._providers = providers
+
+    def complete(
+        self,
+        messages: list[dict[str, Any]],
+        tier: Tier,
+        system: str | None = None,
+        schema: dict[str, Any] | None = None,
+        max_tokens: int = 2048,
+    ) -> Completion:
+        last_error: Exception | None = None
+        for index, provider in enumerate(self._providers):
+            try:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(
+                        provider.complete, messages, tier, system, schema, max_tokens
+                    )
+                    result = future.result(timeout=LLM_TIMEOUT_SECONDS)
+                log.info(
+                    "llm_completion",
+                    extra={
+                        "provider": provider.name,
+                        "tier": tier.value,
+                        "fallback": index > 0,
+                    },
+                )
+                return result
+            except Exception as exc:  # noqa: BLE001 — failover is intentional
+                last_error = exc
+                log.warning("llm provider %s failed (%s); trying next", provider.name, exc)
+        raise RuntimeError(f"all LLM providers failed: {last_error}")
+
+
 class LLM:
     """The single outbound door. Everything routes through ``complete``."""
 
@@ -250,17 +330,31 @@ class LLM:
 
 
 def _default_provider() -> Provider:
-    """Prefer the real model; fall back to offline rather than crashing."""
+    """Prefer Anthropic, then OpenAI, then offline — never crash boot."""
     if os.environ.get("MIRROR_FORCE_OFFLINE") == "1":
         log.info("MIRROR_FORCE_OFFLINE set — using deterministic provider")
         return OfflineProvider()
+
+    chain: list[Provider] = []
     try:
-        provider = AnthropicProvider()
-        log.info("LLM provider: anthropic")
-        return provider
+        chain.append(AnthropicProvider())
+        log.info("LLM provider candidate: anthropic")
     except Exception as exc:  # missing SDK, missing credentials, bad config
-        log.warning("anthropic provider unavailable (%s) — using offline provider", exc)
-        return OfflineProvider()
+        log.warning("anthropic provider unavailable (%s)", exc)
+
+    if os.environ.get("OPENAI_API_KEY"):
+        try:
+            chain.append(OpenAIProvider())
+            log.info("LLM provider candidate: openai")
+        except Exception as exc:
+            log.warning("openai provider unavailable (%s)", exc)
+
+    chain.append(OfflineProvider())
+    if len(chain) == 1:
+        log.info("LLM provider: offline")
+        return chain[0]
+    log.info("LLM provider: failover chain of %d", len(chain))
+    return FailoverProvider(chain)
 
 
 #: Process-wide default. Tests and the API layer can inject their own.

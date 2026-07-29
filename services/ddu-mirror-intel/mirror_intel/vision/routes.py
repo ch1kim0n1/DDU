@@ -6,10 +6,11 @@ import hashlib
 import secrets
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 from .. import actionlog as A
+from ..ratelimit import VISION_ANALYSES_PER_SESSION, check_session_budget, client_ip
 from ..schema import Origin
 from ..session import SessionConflictError, store
 from .builders import build_face_link_finding
@@ -20,6 +21,8 @@ from .liveness import liveness_store
 from .pipeline import analyze_upload
 
 router = APIRouter(tags=["mirror-vision"])
+
+VISION_MAX_BYTES = 10_000_000
 
 
 def _session(session_id: str):
@@ -36,12 +39,12 @@ def _persist(session) -> None:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-async def _read_upload(file: UploadFile, *, max_bytes: int = 8_000_000) -> bytes:
+async def _read_upload(file: UploadFile, *, max_bytes: int = VISION_MAX_BYTES) -> bytes:
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="empty upload")
     if len(data) > max_bytes:
-        raise HTTPException(status_code=413, detail="image exceeds 8MB limit")
+        raise HTTPException(status_code=413, detail="image exceeds 10MB limit")
     return data
 
 
@@ -91,6 +94,7 @@ async def vision_demo_bytes(slug: str):
 
 @router.post("/vision/analyze")
 async def vision_analyze(
+    request: Request,
     session_id: str = Form(...),
     platform: str | None = Form("upload"),
     parent_id: str | None = Form(None),
@@ -101,6 +105,13 @@ async def vision_analyze(
 
     Definition of done: demo photo returns GPS + cached objects in <2s.
     """
+    check_session_budget(
+        endpoint="/intel/vision/analyze",
+        session_id=session_id,
+        bucket="vision",
+        limit=VISION_ANALYSES_PER_SESSION,
+        ip=client_ip(request),
+    )
     session = _session(session_id)
     data = await _read_upload(file)
     result = analyze_upload(

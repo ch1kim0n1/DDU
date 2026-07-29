@@ -23,6 +23,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
+import re
 import secrets
 from contextvars import ContextVar
 from typing import Any
@@ -40,9 +42,24 @@ from .mock import demo_identity, generate
 from .personas import PERSONAS, load_persona_weights
 from .providers import provider_status
 from .quarantine import classify_injection, parse_untrusted
+from .audit_persist import append_action, read_audit_log
+from .env import is_production, refuse_dev_session_features
+from .lineage_hooks import lineage_run
+from .ratelimit import (
+    PROPOSAL_APPROVALS_PER_SESSION,
+    VOICE_TURNS_PER_SESSION,
+    acquire_ws,
+    check_session_budget,
+    client_ip,
+    limiter,
+    limits_enabled,
+    release_session,
+    release_ws,
+    ws_client_ip,
+)
 from .records import jurisdictions, personalize
 from .remediation import build_checklist
-from .schema import CONTRACT_VERSION, Finding, Origin
+from .schema import CONTRACT_VERSION, Finding, Origin, SessionSnapshot
 from .session import SessionConflictError, store
 from .vision.routes import cleanup_session_vision, router as vision_router
 from .voice import VoiceConfigurationError, answer_turn
@@ -65,30 +82,54 @@ _suppress_broadcast: ContextVar[bool] = ContextVar(
 
 
 class SessionCreate(BaseModel):
-    session_id: str | None = None
-    emails: list[str] = Field(default_factory=list)
-    handles: list[str] = Field(default_factory=list)
-    account_urls: list[str] = Field(default_factory=list)
-    persona: str = "scammer"
+    session_id: str | None = Field(
+        default=None,
+        description="Optional client-supplied session id; server may replace it.",
+        examples=["sess_demo_abc123"],
+    )
+    emails: list[str] = Field(
+        default_factory=list,
+        description="Verified emails the subject controls.",
+        examples=[["you@example.com"]],
+    )
+    handles: list[str] = Field(
+        default_factory=list,
+        description="Verified social handles without leading @.",
+        examples=[["alice"]],
+    )
+    account_urls: list[str] = Field(
+        default_factory=list,
+        description="Verified profile URLs.",
+        examples=[["https://linkedin.com/in/you"]],
+    )
+    persona: str = Field(
+        default="scammer",
+        description="Threat model persona key.",
+        examples=["scammer"],
+    )
     #: Populate the graph with mock findings so C and D can build against a
     #: full scene without waiting for real discovery.
-    seed_mock_findings: bool = False
+    seed_mock_findings: bool = Field(
+        default=False,
+        description="Seed mock findings (blocked in production).",
+        examples=[True],
+    )
 
 
 class PlanRequest(BaseModel):
-    session_id: str
+    session_id: str = Field(..., description="Active session id", examples=["sess_demo_abc123"])
     #: Context the human supplied in onboarding — jurisdiction for the records
     #: advisor, a pasted bio for the quarantine demo.
-    state: str | None = None
-    county: str | None = None
-    scraped_bio: str | None = None
-    bio_source: str | None = None
+    state: str | None = Field(default=None, description="US state code", examples=["TX"])
+    county: str | None = Field(default=None, description="County name", examples=["Travis"])
+    scraped_bio: str | None = Field(default=None, description="Optional pasted bio for quarantine demo")
+    bio_source: str | None = Field(default=None, description="Source label for scraped_bio")
 
 
 class DecisionRequest(BaseModel):
-    session_id: str
-    proposal_id: str
-    reason: str | None = None
+    session_id: str = Field(..., description="Active session id", examples=["sess_demo_abc123"])
+    proposal_id: str = Field(..., description="Proposal awaiting approval", examples=["prop_1"])
+    reason: str | None = Field(default=None, description="Optional human reason for reject/edit")
 
 
 class EditRequest(DecisionRequest):
@@ -240,14 +281,22 @@ async def contract() -> dict[str, Any]:
 # ── session lifecycle ────────────────────────────────────────────────────
 
 
-@router.post("/session")
-async def create_session(body: SessionCreate, request: Request) -> dict[str, Any]:
+@router.post("/session", tags=["Sessions"])
+@limiter.limit("5/hour", exempt_when=lambda: not limits_enabled())
+async def create_session(request: Request, body: SessionCreate) -> dict[str, Any]:
     """Register a session from an already-verified identity set.
 
     The caller is Engineer A's identity gate, after a code loop or OAuth. This
     endpoint trusts the set it is given and treats it as the ceiling — every
     downstream worker refuses anything outside it.
     """
+    refused = refuse_dev_session_features(
+        seed_mock=body.seed_mock_findings,
+        session_id=body.session_id,
+    )
+    if refused:
+        raise HTTPException(status_code=400, detail=refused)
+
     token = _bearer(request)
     assertion = None
     if token or verifier.required:
@@ -260,6 +309,11 @@ async def create_session(body: SessionCreate, request: Request) -> dict[str, Any
         session_id = f"sess_{secrets.token_urlsafe(18)}"
         identity = assertion.build_identity(session_id)
     else:
+        if is_production():
+            raise HTTPException(
+                status_code=401,
+                detail="production requires a verified identity assertion",
+            )
         session_id = body.session_id or f"sess_dev_{secrets.token_urlsafe(12)}"
         if not (body.emails or body.handles or body.account_urls):
             raise HTTPException(
@@ -277,18 +331,23 @@ async def create_session(body: SessionCreate, request: Request) -> dict[str, Any
             status_code=400,
             detail="mock findings cannot be seeded in production identity mode",
         )
-    session = store.create(identity, persona=body.persona)
-
-    if body.seed_mock_findings:
-        session.add_findings(generate(identity))
-        session.log.record(
-            A.FINDING_ADDED,
-            actor=Origin.SYSTEM,
-            subject=session.session_id,
-            detail="Mock findings seeded for frontend development — NOT REAL DATA.",
-            mock=True,
+    with lineage_run("mirror.session.create", session_id=session_id):
+        session = store.create(
+            identity, persona=body.persona, created_ip=client_ip(request)
         )
-    _persist(session)
+
+        if body.seed_mock_findings:
+            session.add_findings(generate(identity))
+            session.log.record(
+                A.FINDING_ADDED,
+                actor=Origin.SYSTEM,
+                subject=session.session_id,
+                detail="Mock findings seeded for frontend development — NOT REAL DATA.",
+                mock=True,
+            )
+        _persist(session)
+        for entry in session.log.entries():
+            append_action(session.session_id, entry.model_dump(mode="json"))
     await _broadcast(session.session_id, "session.created", session=session)
 
     return {
@@ -305,10 +364,42 @@ async def create_session(body: SessionCreate, request: Request) -> dict[str, Any
     }
 
 
-@router.get("/session/{session_id}")
-async def get_snapshot(session_id: str) -> dict[str, Any]:
+@router.get("/session/{session_id}", response_model=SessionSnapshot, tags=["Sessions"])
+async def get_snapshot(request: Request, session_id: str) -> SessionSnapshot:
     """Everything D needs to render, in one call."""
-    return _session(session_id).snapshot().model_dump(mode="json")
+    store.note_access_ip(session_id, client_ip(request))
+    return _session(session_id).snapshot()
+
+
+@router.get("/session/{session_id}/export", tags=["Sessions"])
+async def export_session(session_id: str) -> dict[str, Any]:
+    """GDPR data-subject export: findings, action log, identity (no vault secrets)."""
+    session = _session(session_id)
+    state = session.export_state()
+    state.pop("vault", None)
+    state["exported_at"] = __import__("datetime").datetime.utcnow().isoformat() + "Z"
+    state["note"] = "Raw vault secrets are never exported. Wipe destroys them."
+    return state
+
+
+@router.get("/session/{session_id}/audit-log")
+async def session_audit_log(session_id: str) -> dict[str, Any]:
+    """Append-only audit trail for compliance. Combines live + persisted JSONL."""
+    session = store.get(session_id)
+    live = (
+        [e.model_dump(mode="json") for e in session.log.entries()]
+        if session is not None
+        else []
+    )
+    persisted = read_audit_log(session_id)
+    # Prefer the longer append-only file when present.
+    entries = persisted if len(persisted) >= len(live) else live
+    return {
+        "session_id": session_id,
+        "append_only": True,
+        "count": len(entries),
+        "entries": entries,
+    }
 
 
 @router.delete("/session/{session_id}")
@@ -320,6 +411,7 @@ async def wipe_session(session_id: str) -> dict[str, Any]:
     """
     session = _session(session_id)
     counts = session.wipe()
+    release_session(session_id)
     session.log.record(
         A.SESSION_WIPED,
         actor=Origin.SYSTEM,
@@ -416,9 +508,14 @@ def _run(session_id: str, proposal_id: str) -> dict[str, Any]:
     }
 
 
-@router.post("/scan/approve")
-async def approve(body: DecisionRequest) -> dict[str, Any]:
-    """Human approves; the work then runs."""
+async def _approve_impl(body: DecisionRequest, *, ip: str) -> dict[str, Any]:
+    check_session_budget(
+        endpoint="/intel/scan/approve",
+        session_id=body.session_id,
+        bucket="approve",
+        limit=PROPOSAL_APPROVALS_PER_SESSION,
+        ip=ip,
+    )
     try:
         result = runtime.resume(
             body.session_id,
@@ -430,6 +527,12 @@ async def approve(body: DecisionRequest) -> dict[str, Any]:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     await _broadcast(body.session_id, "finding.new", payload=result)
     return result
+
+
+@router.post("/scan/approve")
+async def approve(body: DecisionRequest, request: Request) -> dict[str, Any]:
+    """Human approves; the work then runs."""
+    return await _approve_impl(body, ip=client_ip(request))
 
 
 @router.post("/scan/edit")
@@ -789,15 +892,43 @@ async def voice_status() -> dict[str, Any]:
     }
 
 
-@router.get("/providers/status")
+@router.get("/providers/status", tags=["Health"])
 async def providers_status() -> dict[str, Any]:
     """Deployment posture without exposing credential values."""
     return provider_status()
 
 
+@router.get("/providers", tags=["Health"])
+async def providers_summary() -> dict[str, str]:
+    """Compact LLM/provider availability for the UI status indicator."""
+    status = provider_status()
+    llm = status.get("providers", {}).get("llm", {})
+    anthropic = "available" if os.environ.get("ANTHROPIC_API_KEY") else "not_configured"
+    openai = "available" if os.environ.get("OPENAI_API_KEY") else "not_configured"
+    return {
+        "anthropic": anthropic,
+        "openai": openai,
+        "local": "available",
+        "llm": "available" if llm.get("ready") or llm.get("configured") else "degraded",
+        "elevenlabs": (
+            "available"
+            if os.environ.get("ELEVENLABS_API_KEY")
+            else "not_configured"
+        ),
+        "redis": "connected" if store.backend_name.startswith("redis") else "disabled",
+    }
+
+
 @router.post("/voice/turn")
-async def voice_turn(body: VoiceTurnRequest) -> dict[str, Any]:
+async def voice_turn(body: VoiceTurnRequest, request: Request) -> dict[str, Any]:
     """STT -> local PII scrub -> grounded voice-tier LLM -> scrub -> TTS."""
+    check_session_budget(
+        endpoint="/intel/voice/turn",
+        session_id=body.session_id,
+        bucket="voice",
+        limit=VOICE_TURNS_PER_SESSION,
+        ip=client_ip(request),
+    )
     session = _session(body.session_id)
     if body.mode not in {"question", "narrate"}:
         raise HTTPException(status_code=400, detail="mode must be question or narrate")
@@ -914,8 +1045,37 @@ async def live_session(websocket: WebSocket, session_id: str) -> None:
     approve/edit/reject state machine, so WebSocket transport cannot bypass
     its human authorization check.
     """
+    ip = ws_client_ip(websocket)
     if store.get(session_id) is None:
-        await websocket.close(code=4404, reason="unknown session")
+        log.warning(
+            "websocket_rejected",
+            extra={"session_id": session_id, "ip": ip, "reason": "unknown_session"},
+        )
+        await websocket.close(code=1008, reason="Session not found")
+        return
+
+    origin = websocket.headers.get("origin") or ""
+    origin_re = os.environ.get(
+        "MIRROR_UI_ORIGIN_REGEX",
+        r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    )
+    if origin and not re.match(origin_re, origin):
+        log.warning(
+            "websocket_rejected",
+            extra={
+                "session_id": session_id,
+                "ip": ip,
+                "reason": "unexpected_origin",
+                "origin": origin,
+            },
+        )
+        await websocket.close(code=1008, reason="Origin not allowed")
+        return
+
+    try:
+        acquire_ws(ip)
+    except HTTPException:
+        await websocket.close(code=1008, reason="Too many WebSocket connections")
         return
 
     await websocket.accept()
@@ -959,11 +1119,12 @@ async def live_session(websocket: WebSocket, session_id: str) -> None:
                     )
                     event = "agent.awaiting_approval"
                 elif action == "proposal.approve":
-                    payload = await approve(
+                    payload = await _approve_impl(
                         DecisionRequest(
                             session_id=session_id,
                             proposal_id=str(message.get("proposal_id", "")),
-                        )
+                        ),
+                        ip=ip,
                     )
                     event = "finding.new"
                 elif action == "proposal.reject":
@@ -1053,6 +1214,7 @@ async def live_session(websocket: WebSocket, session_id: str) -> None:
     except WebSocketDisconnect:
         return
     finally:
+        release_ws(ip)
         forward_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await forward_task

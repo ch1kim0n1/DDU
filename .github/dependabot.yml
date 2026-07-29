@@ -1,0 +1,81 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/ui/ddu-ui"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    reviewers:
+      - ch1kim0n1
+
+  - package-ecosystem: pip
+    directory: "/services/ddu-mirror-intel"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    reviewers:
+      - ch1kim0n1
+
+  - package-ecosystem: pip
+    directory: "/libs/ddu-py-common"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    reviewers:
+      - ch1kim0n1
+
+  - package-ecosystem: gomod
+    directory: "/services/ddu-api"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    reviewers:
+      - ch1kim0n1
+
+  - package-ecosystem: gomod
+    directory: "/libs/ddu-evidence"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    reviewers:
+      - ch1kim0n1
+
+  - package-ecosystem: gomod
+    directory: "/libs/ddu-contracts"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    reviewers:
+      - ch1kim0n1
+
+  - package-ecosystem: gomod
+    directory: "/libs/ddu-httpclient"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    reviewers:
+      - ch1kim0n1
+
+  - package-ecosystem: docker
+    directory: "/services/ddu-mirror-intel"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    reviewers:
+      - ch1kim0n1
+
+  - package-ecosystem: docker
+    directory: "/ui/ddu-ui"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    reviewers:
+      - ch1kim0n1
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    reviewers:
+      - ch1kim0n1

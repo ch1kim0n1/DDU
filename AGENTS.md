@@ -93,6 +93,40 @@ docker compose down      # keep data
 docker compose down -v   # destroy data
 ```
 
+### Mirror UI + production stack
+
+```bash
+cd ui/ddu-ui && npm install && npm run build && npm run preview
+cd ui/ddu-ui && npm test
+cd ui/ddu-ui && npm run e2e
+cd ui/ddu-ui && npm run bundle:analyze
+# Production (TLS via Caddy):
+docker compose -f infra/docker-compose.prod.yml up -d --build
+```
+
+`MIRROR_ENV` values: `development` (default), `staging`, `production`.
+Production disables mock seeding / Swagger and expects identity + Redis.
+Set `MIRROR_RATE_LIMIT=0` only for automated tests.
+
+API versioning: responses include `X-API-Version`. Breaking changes increment the major
+version; additive changes stay backward-compatible. Frontend expects major `1.0`.
+
+```bash
+# Integration / release gates
+bash scripts/smoke-test.sh
+bash scripts/verify-frontend.sh
+bash scripts/verify-backend.sh
+# Load tests (against staging)
+k6 run tests/load/session-create.js
+# Image scan
+trivy image ddu-mirror-intel:latest
+# Pre-deploy gate (must pass before every production deploy)
+MIRROR_ENV=production MIRROR_IDENTITY_REQUIRED=1 \
+  MIRROR_REDIS_URL=... MIRROR_SESSION_ENCRYPTION_KEY=... \
+  MIRROR_UI_ORIGIN_REGEX='^https://yourdomain\.example$' \
+  ./scripts/pre-deploy-check.sh
+```
+
 ## Conventions
 
 ### Service interface contract

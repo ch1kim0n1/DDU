@@ -56,11 +56,27 @@ export function VisionPanel({
     focus: Finding | null;
     accepted: Finding[];
   } | null>(null);
+  const [faceConfigured, setFaceConfigured] = useState(true);
+  const [objectDetectionOnline, setObjectDetectionOnline] = useState(true);
 
   useEffect(() => {
     void mirrorApi.visionDemos().then((payload) => setDemos(payload.assets)).catch(() => {
       /* panel stays usable for raw upload */
     });
+    void mirrorApi
+      .health()
+      .then((payload) => {
+        const deps = (payload as {dependencies?: Record<string, string>}).dependencies || {};
+        if (deps.compreface === "offline" || deps.compreface === "unconfigured") {
+          setFaceConfigured(false);
+        }
+        if (deps.vision === "degraded" || deps.grounded_sam === "offline") {
+          setObjectDetectionOnline(false);
+        }
+      })
+      .catch(() => {
+        setObjectDetectionOnline(false);
+      });
   }, []);
 
   function announcePayoff(accepted: Finding[]) {
@@ -75,6 +91,10 @@ export function VisionPanel({
   }
 
   async function analyzeFile(file: File, platform = "upload") {
+    if (!file.type.startsWith("image/")) {
+      setError("Only image files are supported (JPG, PNG, WebP).");
+      return;
+    }
     setBusy("vision-analyze");
     setError("");
     try {
@@ -84,7 +104,14 @@ export function VisionPanel({
       if (result.snapshot) onSnapshot(result.snapshot);
       announcePayoff(result.accepted || []);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Vision analyze failed");
+      const message = reason instanceof Error ? reason.message : "Vision analyze failed";
+      if (message.includes("503") || message.toLowerCase().includes("unavailable")) {
+        setError(
+          "Vision analysis is temporarily unavailable. Your photo has been saved for later processing.",
+        );
+      } else {
+        setError(message);
+      }
     } finally {
       setBusy("");
     }
@@ -125,6 +152,16 @@ export function VisionPanel({
         Demo photos are pre-indexed by file hash (Grounded-SAM-2 + GeoCLIP). EXIF
         is read live. Say so on stage.
       </p>
+      {!faceConfigured ? (
+        <p className="vision-note" role="status">
+          Face recognition is not configured. You can still upload photos for GPS extraction.
+        </p>
+      ) : null}
+      {!objectDetectionOnline ? (
+        <p className="vision-note" role="status">
+          Object detection is offline. Photos will be stored for later analysis.
+        </p>
+      ) : null}
 
       <div className="demo-asset-list">
         {demos.map((demo) => (

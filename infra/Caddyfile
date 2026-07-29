@@ -1,0 +1,54 @@
+# Production reverse proxy for DDU Mirror.
+# Replace yourdomain.example with the real hostname before deploy.
+#
+# Automatic HTTPS via Let's Encrypt is enabled by using the hostname
+# (not :80 alone) as the site address.
+
+yourdomain.example {
+	encode gzip
+
+	# Force HTTPS + HSTS
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		# Enforced CSP (staging keeps Report-Only in Caddyfile.staging).
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; connect-src 'self' wss://yourdomain.example https://yourdomain.example; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://tile.openstreetmap.org; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		X-Frame-Options "DENY"
+	}
+
+	# Frontend (nginx container or static files)
+	handle {
+		reverse_proxy frontend:80
+	}
+
+	# API + WebSocket
+	handle /intel/* {
+		reverse_proxy mirror-intel:8120 {
+			# Long-lived WebSocket connections
+			transport http {
+				read_timeout 300s
+				write_timeout 300s
+			}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	handle /healthz {
+		reverse_proxy mirror-intel:8120
+	}
+
+	handle /versionz {
+		reverse_proxy mirror-intel:8120
+	}
+
+	handle /readyz {
+		reverse_proxy mirror-intel:8120
+	}
+
+	handle /metrics {
+		reverse_proxy mirror-intel:8120
+	}
+}

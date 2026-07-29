@@ -1,9 +1,45 @@
 import {Line, OrbitControls, Text} from "@react-three/drei";
 import {Canvas, useFrame} from "@react-three/fiber";
-import {useEffect, useMemo, useRef, useState} from "react";
+import {memo, useEffect, useMemo, useRef, useState} from "react";
 import * as THREE from "three";
 
+import {ErrorBoundary} from "./ErrorBoundary";
 import type {AttackPath, Finding} from "./mirror-types";
+
+function supportsWebGL(): boolean {
+  try {
+    const canvas = document.createElement("canvas");
+    return Boolean(
+      canvas.getContext("webgl2") ||
+        canvas.getContext("webgl") ||
+        canvas.getContext("experimental-webgl"),
+    );
+  } catch {
+    return false;
+  }
+}
+
+function SceneFallback({findings}: {findings: Finding[]}) {
+  const sorted = [...findings].sort((a, b) => b.severity_score - a.severity_score);
+  return (
+    <div className="scene-fallback" aria-label="2D exposure list fallback">
+      <strong>3D view unavailable</strong>
+      <p>WebGL is not available in this browser. Showing a text hierarchy instead.</p>
+      <ul>
+        {sorted.map((finding) => (
+          <li className={`severity-${finding.severity}`} key={finding.id}>
+            <span className="hop">H{finding.hop_depth}</span>
+            <span className={`state-chip state-${finding.verification_state}`}>
+              {finding.verification_state}
+            </span>
+            <strong>{finding.label}</strong>
+            <small>{finding.detail}</small>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 // Blueprint-derived palette: green3=confirmed, blue5=likely, orange3=hypothesis
 const STATE_COLORS: Record<Finding["verification_state"], string> = {
@@ -52,6 +88,26 @@ function layoutFindings(findings: Finding[]): LayoutNode[] {
           position: [x, 0, z],
         });
       });
+  }
+
+  // Minimum-distance + simple repulsion so labels don't stack at 20–50 nodes.
+  const minDist = 0.5;
+  for (let iter = 0; iter < 10; iter += 1) {
+    for (let i = 0; i < output.length; i += 1) {
+      for (let j = i + 1; j < output.length; j += 1) {
+        const a = output[i].position;
+        const b = output[j].position;
+        const dx = b[0] - a[0];
+        const dz = b[2] - a[2];
+        const dist = Math.hypot(dx, dz) || 0.001;
+        if (dist >= minDist) continue;
+        const push = ((minDist - dist) / 2) * 0.85;
+        const nx = dx / dist;
+        const nz = dz / dist;
+        output[i].position = [a[0] - nx * push, a[1], a[2] - nz * push];
+        output[j].position = [b[0] + nx * push, b[1], b[2] + nz * push];
+      }
+    }
   }
   return output;
 }
@@ -251,7 +307,7 @@ function SceneContents({
   );
 }
 
-export function Scene3D({
+function Scene3DComponent({
   findings,
   attackPaths,
   selectedId,
@@ -260,6 +316,7 @@ export function Scene3D({
   hiddenIds,
   onSelect,
 }: Scene3DProps) {
+  const [webglOk] = useState(() => supportsWebGL());
   const visible = findings.filter(
     (finding) =>
       !hiddenIds?.has(finding.id) &&
@@ -275,22 +332,26 @@ export function Scene3D({
           <strong>Your verified identity is protected.</strong>
           <p>Approve an expansion to materialize findings here.</p>
         </div>
+      ) : !webglOk ? (
+        <SceneFallback findings={visible} />
       ) : (
-        <Canvas
-          camera={{fov: 46, position: [9, 9, 12]}}
-          dpr={[1, 1.75]}
-          gl={{antialias: true, alpha: false}}
-          shadows
-        >
-          <SceneContents
-            attackPaths={attackPaths}
-            findings={visible}
-            onSelect={onSelect}
-            refusedIds={refusedIds}
-            remediatedIds={remediatedIds}
-            selectedId={selectedId}
-          />
-        </Canvas>
+        <ErrorBoundary fallback={<SceneFallback findings={visible} />}>
+          <Canvas
+            camera={{fov: 46, position: [9, 9, 12]}}
+            dpr={[1, 1.75]}
+            gl={{antialias: true, alpha: false}}
+            shadows
+          >
+            <SceneContents
+              attackPaths={attackPaths}
+              findings={visible}
+              onSelect={onSelect}
+              refusedIds={refusedIds}
+              remediatedIds={remediatedIds}
+              selectedId={selectedId}
+            />
+          </Canvas>
+        </ErrorBoundary>
       )}
       <div className="scene-axis" aria-hidden="true">
         <span>SEED</span>
@@ -310,3 +371,15 @@ export function Scene3D({
     </div>
   );
 }
+
+export const Scene3D = memo(Scene3DComponent, (prev, next) => {
+  return (
+    prev.findings.length === next.findings.length &&
+    prev.selectedId === next.selectedId &&
+    prev.remediatedIds === next.remediatedIds &&
+    prev.refusedIds === next.refusedIds &&
+    prev.hiddenIds === next.hiddenIds &&
+    prev.attackPaths.length === next.attackPaths.length &&
+    prev.onSelect === next.onSelect
+  );
+});

@@ -34,6 +34,10 @@ jobs:
   # ─────────────────────────────────────────────
   # Go: lint + build + vet for every Go service and lib
   # ─────────────────────────────────────────────
+  # Go services/libs. Note: libs/ddu-contracts is primarily covered by the
+  # contracts job (buf lint + buf generate) because it is a protobuf library
+  # with generated Go. We still run go build there (below) to catch compile
+  # errors buf does not surface; vet/test/lint are skipped for generated code.
   go:
     name: go (${{ matrix.module }})
     runs-on: ubuntu-latest
@@ -43,6 +47,7 @@ jobs:
         module:
           - libs/ddu-lineage-emitter
           - libs/ddu-evidence
+          - libs/ddu-httpclient
           - services/ddu-api
           - services/ddu-ingest
           - services/ddu-storage
@@ -75,6 +80,27 @@ jobs:
           version: v1.60
           working-directory: ${{ matrix.module }}
           args: --timeout=5m
+
+  go-contracts-build:
+    name: go (libs/ddu-contracts build-only)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: libs/ddu-contracts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: false
+      - name: go build generated module
+        run: |
+          if [ -f go.mod ]; then
+            go mod download
+            go build ./...
+          else
+            echo "no go.mod yet (protobuf-only); contracts job covers generation"
+          fi
 
   # ─────────────────────────────────────────────
   # Python: install + import smoke for every Python service and common lib
@@ -153,5 +179,86 @@ jobs:
         run: npm install
       - name: typecheck
         run: npx tsc --noEmit
+      - name: unit tests
+        run: npm test
       - name: build
         run: npm run build
+      - name: verify-frontend script
+        working-directory: .
+        run: bash scripts/verify-frontend.sh
+
+  smoke:
+    name: mirror smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: install
+        run: |
+          pip install -e libs/ddu-py-common
+          pip install -e services/ddu-mirror-intel
+          pip install pytest httpx
+      - name: pytest mirror-intel
+        run: |
+          export MIRROR_RATE_LIMIT=0
+          export MIRROR_ENV=development
+          python -m pytest services/ddu-mirror-intel -q
+      - name: validate prod compose
+        env:
+          MIRROR_SESSION_ENCRYPTION_KEY: ci-only-not-for-production-use-32b
+        run: docker compose -f infra/docker-compose.prod.yml config --quiet
+      - name: smoke-test script
+        run: |
+          export MIRROR_RATE_LIMIT=0
+          export MIRROR_ENV=development
+          bash scripts/smoke-test.sh
+      - name: verify-backend script
+        run: |
+          export MIRROR_RATE_LIMIT=0
+          export MIRROR_ENV=development
+          bash scripts/verify-backend.sh
+
+  e2e:
+    name: mirror e2e (playwright)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui/ddu-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: install backend
+        working-directory: .
+        run: |
+          pip install -e libs/ddu-py-common
+          pip install -e services/ddu-mirror-intel
+      - name: npm install
+        run: npm install
+      - name: install playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: run e2e
+        env:
+          MIRROR_RATE_LIMIT: "0"
+          MIRROR_ENV: development
+        run: npx playwright test --project=chromium
+
+  trivy:
+    name: trivy image scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build mirror-intel image
+        run: docker build -t ddu-mirror-intel:ci -f services/ddu-mirror-intel/Dockerfile .
+      - name: run trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ddu-mirror-intel:ci
+          severity: HIGH,CRITICAL
+          exit-code: "1"

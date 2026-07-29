@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DDU Mirror Privacy Policy</title>
+    <style>
+      body { font-family: "Segoe UI", system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; line-height: 1.55; color: #1c2127; }
+      h1, h2 { letter-spacing: 0.02em; }
+      a { color: #2d72d2; }
+    </style>
+  </head>
+  <body>
+    <h1>DDU Mirror Privacy Policy</h1>
+    <p><em>Last updated: 2026-07-29</em></p>
+
+    <h2>What we collect</h2>
+    <p>
+      Identifiers you provide during onboarding: email addresses, usernames/handles,
+      and optional profile URLs. Optional context such as state/county and a free-text
+      guess about your exposure. Session activity (approvals, rejections, wipes) is
+      recorded in an append-only action log for that session only.
+    </p>
+
+    <h2>How we use it</h2>
+    <p>
+      Data is used solely to discover and display your own public footprint and to
+      propose human-approved expansions. We do not sell personal data. Discovery
+      refuses targets outside the identifiers you verified.
+    </p>
+
+    <h2>How long it is stored</h2>
+    <p>
+      Sessions are ephemeral. Findings and raw evidence values are destroyed when you
+      wipe the session, when the session TTL expires (default 30 minutes), or when the
+      process restarts if Redis is not configured. Append-only audit logs may retain
+      redacted action metadata for compliance until the retention window elapses.
+      Nothing is retained as a long-term marketing profile. You can export your
+      current session via "Download my data" while it exists.
+    </p>
+
+    <h2>Third-party processors (optional)</h2>
+    <ul>
+      <li><strong>ElevenLabs</strong> — only if configured; used for optional speech-to-text / TTS. Transcripts are scrubbed of PII before LLM use.</li>
+      <li><strong>LLM provider</strong> (e.g. Anthropic) — only if configured; receives scrubbed, allowlisted fields for remediation copy and grounded answers.</li>
+      <li><strong>Map tile providers</strong> — MapLibre may load OpenStreetMap tiles in your browser; exact GPS values stay redacted server-side by default.</li>
+    </ul>
+
+    <h2>Your rights</h2>
+    <p>
+      You may wipe your session at any time ("End &amp; wipe"), which permanently
+      destroys findings, attack paths, and vault entries for that session. You may
+      also request an export of the current session data while it exists.
+    </p>
+
+    <h2>Biometric data</h2>
+    <p>
+      Liveness checks run locally in your browser (MediaPipe). Face mesh processing
+      does not stream video to our servers. At most one verified frame may be uploaded
+      after you pass, and biometric templates are short-lived and destroyed with the
+      session or when you close the panel.
+    </p>
+
+    <p><a href="/">Back to DDU Mirror</a></p>
+  </body>
+</html>

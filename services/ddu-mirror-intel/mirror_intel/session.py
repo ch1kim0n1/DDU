@@ -25,6 +25,7 @@ import logging
 import os
 import secrets
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Sequence
 
@@ -336,15 +337,46 @@ class SessionStore:
     without touching any caller.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, ttl_seconds: int | None = None) -> None:
         self._sessions: dict[str, Session] = {}
+        self._created_at: dict[str, float] = {}
+        self._created_ip: dict[str, str] = {}
         self._lock = threading.Lock()
+        self._ttl = int(
+            ttl_seconds
+            if ttl_seconds is not None
+            else os.environ.get("MIRROR_SESSION_TTL_SECONDS", "1800")
+        )
 
-    def create(self, identity: VerifiedIdentity, persona: str = DEFAULT_PERSONA) -> Session:
+    def create(
+        self,
+        identity: VerifiedIdentity,
+        persona: str = DEFAULT_PERSONA,
+        created_ip: str = "",
+    ) -> Session:
         session = Session(session_id=identity.session_id, identity=identity, persona=persona)
         with self._lock:
             self._sessions[session.session_id] = session
+            self._created_at[session.session_id] = time.time()
+            if created_ip:
+                self._created_ip[session.session_id] = created_ip
         return session
+
+    def note_access_ip(self, session_id: str, ip: str) -> None:
+        """Log when a session is accessed from a different IP than creation."""
+        if not ip:
+            return
+        with self._lock:
+            created = self._created_ip.get(session_id)
+            if created and created != ip:
+                log.warning(
+                    "session_ip_mismatch",
+                    extra={
+                        "session_id": session_id,
+                        "created_ip": created,
+                        "access_ip": ip,
+                    },
+                )
 
     @property
     def backend_name(self) -> str:
@@ -352,7 +384,7 @@ class SessionStore:
 
     @property
     def ttl_seconds(self) -> int | None:
-        return None
+        return self._ttl
 
     def persist(self, session: Session) -> None:
         """Memory sessions are already live; durable stores override this."""
@@ -360,8 +392,27 @@ class SessionStore:
     def healthy(self) -> bool:
         return True
 
+    def _expire_locked(self, session_id: str) -> None:
+        created = self._created_at.get(session_id)
+        if created is None or self._ttl <= 0:
+            return
+        age = time.time() - created
+        if age <= self._ttl:
+            return
+        session = self._sessions.pop(session_id, None)
+        self._created_at.pop(session_id, None)
+        self._created_ip.pop(session_id, None)
+        if session is not None:
+            session.wipe()
+            log.info(
+                "session_auto_expired",
+                extra={"session_id": session_id, "age_seconds": int(age)},
+            )
+
     def get(self, session_id: str) -> Session | None:
-        return self._sessions.get(session_id)
+        with self._lock:
+            self._expire_locked(session_id)
+            return self._sessions.get(session_id)
 
     def require(self, session_id: str) -> Session:
         session = self.get(session_id)
@@ -372,15 +423,23 @@ class SessionStore:
     def drop(self, session_id: str) -> dict[str, int] | None:
         with self._lock:
             session = self._sessions.pop(session_id, None)
+            self._created_at.pop(session_id, None)
+            self._created_ip.pop(session_id, None)
         return session.wipe() if session else None
 
     def ids(self) -> list[str]:
-        return list(self._sessions)
+        with self._lock:
+            for session_id in list(self._sessions):
+                self._expire_locked(session_id)
+            return list(self._sessions)
 
     def stats(self) -> dict[str, Any]:
+        ids = self.ids()
         return {
-            "sessions": len(self._sessions),
-            "findings": sum(len(s.findings) for s in self._sessions.values()),
+            "sessions": len(ids),
+            "findings": sum(
+                len(self._sessions[sid].findings) for sid in ids if sid in self._sessions
+            ),
             "backend": self.backend_name,
             "ttl_seconds": self.ttl_seconds,
         }
@@ -465,7 +524,12 @@ class RedisSessionStore(SessionStore):
             raise ValueError("persisted session revision mismatch")
         return session
 
-    def create(self, identity: VerifiedIdentity, persona: str = DEFAULT_PERSONA) -> Session:
+    def create(
+        self,
+        identity: VerifiedIdentity,
+        persona: str = DEFAULT_PERSONA,
+        created_ip: str = "",
+    ) -> Session:
         session = Session(session_id=identity.session_id, identity=identity, persona=persona)
         if not self._client.set(
             self._key(session.session_id),
@@ -474,7 +538,27 @@ class RedisSessionStore(SessionStore):
             nx=True,
         ):
             raise ValueError(f"session {session.session_id} already exists")
+        if created_ip:
+            self._client.set(
+                f"{self._key(session.session_id)}:ip",
+                created_ip,
+                ex=self._ttl,
+            )
         return session
+
+    def note_access_ip(self, session_id: str, ip: str) -> None:
+        if not ip:
+            return
+        created = self._client.get(f"{self._key(session_id)}:ip")
+        if created and created != ip:
+            log.warning(
+                "session_ip_mismatch",
+                extra={
+                    "session_id": session_id,
+                    "created_ip": created,
+                    "access_ip": ip,
+                },
+            )
 
     def get(self, session_id: str) -> Session | None:
         key = self._key(session_id)
@@ -548,21 +632,48 @@ class RedisSessionStore(SessionStore):
             return False
 
 
+def _redis_with_retry(client: Any, op: str, *args: Any, **kwargs: Any) -> Any:
+    """3 retries with exponential backoff (100/200/400ms)."""
+    delays = (0.1, 0.2, 0.4)
+    last: Exception | None = None
+    for attempt, delay in enumerate(delays):
+        try:
+            return getattr(client, op)(*args, **kwargs)
+        except Exception as exc:  # noqa: BLE001
+            last = exc
+            log.warning("redis_%s_retry", op, extra={"attempt": attempt + 1, "error": str(exc)})
+            time.sleep(delay)
+    raise RuntimeError(f"redis {op} failed after retries: {last}")
+
+
 def build_session_store() -> SessionStore:
     redis_url = os.environ.get("MIRROR_REDIS_URL", "").strip()
+    ttl = int(os.environ.get("MIRROR_SESSION_TTL_SECONDS", "1800"))
     if not redis_url:
-        return SessionStore()
+        return SessionStore(ttl_seconds=ttl)
     encryption_key = os.environ.get("MIRROR_SESSION_ENCRYPTION_KEY", "").strip()
     if not encryption_key:
         raise RuntimeError(
             "MIRROR_REDIS_URL requires MIRROR_SESSION_ENCRYPTION_KEY so PII is "
             "never written to Redis in plaintext"
         )
-    return RedisSessionStore(
-        redis_url,
-        encryption_key,
-        ttl_seconds=int(os.environ.get("MIRROR_SESSION_TTL_SECONDS", "1800")),
-    )
+    try:
+        from redis import ConnectionPool, Redis
+
+        pool = ConnectionPool.from_url(redis_url, max_connections=20)
+        store = RedisSessionStore(
+            redis_url,
+            encryption_key,
+            ttl_seconds=ttl,
+        )
+        client = Redis(connection_pool=pool, decode_responses=True)
+        _redis_with_retry(client, "ping")
+        store._client = client
+        log.info("session_store: redis pooled")
+        return store
+    except Exception as exc:  # noqa: BLE001
+        log.error("redis unavailable (%s); falling back to in-memory store", exc)
+        return SessionStore(ttl_seconds=ttl)
 
 
 store = build_session_store()
