@@ -79,7 +79,7 @@ export function EvidenceDrawer({
           </span>
         </div>
         <button className="icon-button" onClick={onClose} aria-label="Close evidence drawer">
-          ×
+          X
         </button>
       </div>
       <div className="drawer-scroll">
@@ -229,7 +229,7 @@ export function EvidenceDrawer({
               onClick={() => onReject(finding)}
               type="button"
             >
-              {rejecting ? "Recomputing…" : "That’s not me"}
+              {rejecting ? "Recomputing..." : "That's not me"}
             </button>
             <span>Prunes dependent paths and recalculates the score.</span>
           </div>

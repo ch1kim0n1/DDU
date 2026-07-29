@@ -25,7 +25,7 @@ function nodeLabel(entity: Entity) {
     entity.attributes.name ||
     entity.attributes.observation_type ||
     entity.type;
-  return label.length > 28 ? `${label.slice(0, 25)}…` : label;
+  return label.length > 28 ? `${label.slice(0, 25)}...` : label;
 }
 
 interface GraphViewProps {
@@ -181,7 +181,7 @@ function EntityDetails({
           {entity.type}
         </span>
         <button className="close-btn" onClick={onClose} aria-label="Close">
-          ×
+          X
         </button>
       </div>
       <strong className="entity-details-label">

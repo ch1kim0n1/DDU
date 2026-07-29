@@ -87,7 +87,7 @@ export function MirrorMap({
           .setLngLat([lng, lat])
           .setPopup(
             new maplibregl.Popup({offset: 20}).setText(
-              `${finding.label} · ${Math.round(finding.confidence * 100)}% confidence`,
+              `${finding.label}, ${Math.round(finding.confidence * 100)}% confidence`,
             ),
           )
           .addTo(map),

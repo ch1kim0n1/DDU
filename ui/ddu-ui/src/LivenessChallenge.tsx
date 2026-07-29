@@ -1,5 +1,5 @@
 /**
- * Engineer C → A drop-in: client-side liveness challenge.
+ * Engineer C to A drop-in: client-side liveness challenge.
  *
  * MediaPipe FaceLandmarker runs in the browser. Only one verified frame is
  * uploaded after the challenge passes - a real privacy property.
@@ -208,7 +208,7 @@ export function LivenessChallenge({
   return (
     <div className={`liveness-challenge ${className || ""}`}>
       <header>
-        <p className="eyebrow">Biometric step-up · optional</p>
+        <p className="eyebrow">Biometric step-up, optional</p>
         <h3>Live face check</h3>
         <p>
           FaceMesh runs in your browser. Only one verified frame uploads after

@@ -101,11 +101,11 @@ export function VoicePanel({
           </span>
           <div>
             <strong>Mirror voice</strong>
-            <small>PII-scrubbed · session grounded</small>
+            <small>PII-scrubbed, session grounded</small>
           </div>
         </div>
         <button className="icon-button" onClick={onClose} aria-label="Close voice panel">
-          ×
+          X
         </button>
       </header>
       <div className="voice-body">
@@ -123,7 +123,7 @@ export function VoicePanel({
           type="button"
         >
           <span />
-          {recording ? "Stop & scrub" : busy ? "Grounding answer…" : "Ask with voice"}
+          {recording ? "Stop & scrub" : busy ? "Grounding answer..." : "Ask with voice"}
         </button>
         <div className="voice-divider">
           <span>or type locally</span>

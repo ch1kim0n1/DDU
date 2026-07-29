@@ -295,7 +295,7 @@ export function Scene3D({
       <div className="scene-axis" aria-hidden="true">
         <span>SEED</span>
         <i />
-        <span>HOP DEPTH →</span>
+        <span>HOP DEPTH -&gt;</span>
       </div>
       <div className="scene-legend">
         {Object.entries(STATE_COLORS)

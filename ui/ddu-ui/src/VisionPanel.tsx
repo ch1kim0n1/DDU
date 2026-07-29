@@ -115,7 +115,7 @@ export function VisionPanel({
     <section className="rail-section vision-panel">
       <div className="rail-title">
         <div>
-          <p className="eyebrow">Engineer C · Vision</p>
+          <p className="eyebrow">Engineer C, Vision</p>
           <h2>Photo intelligence</h2>
         </div>
         <span>{demos.length}</span>
@@ -157,8 +157,8 @@ export function VisionPanel({
       {last ? (
         <div className="vision-result">
           <p>
-            {last.cache_hit ? "Cache hit" : "Cache miss"} · {last.elapsed_ms}ms
-            {last.within_two_seconds ? " · under 2s ✓" : ""}
+            {last.cache_hit ? "Cache hit" : "Cache miss"}, {last.elapsed_ms}ms
+            {last.within_two_seconds ? ", under 2s" : ""}
           </p>
           <p>{last.accepted.length} findings ingested</p>
           {last.disclosures.map((line) => (

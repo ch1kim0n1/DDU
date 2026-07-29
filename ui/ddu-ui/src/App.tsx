@@ -283,7 +283,7 @@ export default function App() {
     return (
       <div className="boot-screen">
         <div className="boot-mark">M</div>
-        <p>Establishing an ephemeral Mirror session…</p>
+        <p>Establishing an ephemeral Mirror session...</p>
         <span />
       </div>
     );
@@ -310,14 +310,14 @@ export default function App() {
           <span>M</span>
           <div>
             <strong>DDU / MIRROR</strong>
-            <small>Start with yourself. See what they’d see.</small>
+            <small>Start with yourself. See what they'd see.</small>
           </div>
         </div>
         <div className="session-posture">
           <span className={`live-dot ${socketState}`} />
           <div>
             <strong>{socketState === "live" ? "LIVE GRAPH" : "REST FALLBACK"}</strong>
-            <small>Ephemeral · auto-destroy on exit</small>
+            <small>Ephemeral, auto-destroy on exit</small>
           </div>
           <button onClick={() => void wipe()} type="button">
             End & wipe
@@ -351,7 +351,7 @@ export default function App() {
                 : "Your exposure is visible - and partly fixable."}
             </h1>
             <p>
-              {score.contributing_findings} live findings ·{" "}
+              {score.contributing_findings} live findings,{" "}
               {Math.round(score.irreversible_share * 100)}% of weighted risk is
               irreversible
             </p>
@@ -359,7 +359,7 @@ export default function App() {
           <div className="before-after">
             <span>NOW</span>
             <strong>{score.score}</strong>
-            <i>→</i>
+            <i>-&gt;</i>
             <span>AFTER FIXES</span>
             <strong>{simulation?.score_projected.score ?? "-"}</strong>
           </div>
@@ -402,7 +402,7 @@ export default function App() {
                 </select>
               </div>
               <button className="voice-launch" onClick={() => setVoiceOpen(true)}>
-                <span>◉</span> Ask Mirror
+                <span>&bull;</span> Ask Mirror
               </button>
             </div>
             {view === "scene" ? (
@@ -472,7 +472,7 @@ export default function App() {
                           disabled={Boolean(busy)}
                           onClick={() => void decideProposal(proposal, "approve")}
                         >
-                          {busy === `approve:${proposal.id}` ? "Running…" : "Approve"}
+                          {busy === `approve:${proposal.id}` ? "Running..." : "Approve"}
                         </button>
                         <button
                           disabled={Boolean(busy)}
@@ -531,12 +531,12 @@ export default function App() {
                 disabled={fixedIds.size === 0 || Boolean(busy)}
                 onClick={() => void simulate()}
               >
-                {busy === "simulate" ? "Simulating…" : "Simulate selected fixes"}
+                {busy === "simulate" ? "Simulating..." : "Simulate selected fixes"}
               </button>
               {simulation && (
                 <div className="simulation-result">
                   <strong>
-                    {simulation.score_now.score} → {simulation.score_projected.score}
+                    {simulation.score_now.score} -&gt; {simulation.score_projected.score}
                   </strong>
                   <span>
                     {simulation.refused.length
@@ -616,13 +616,13 @@ export default function App() {
         <div className={`wipe-overlay ${wipeState.complete ? "complete" : ""}`}>
           <div className="wipe-grid" />
           <div className="wipe-message">
-            <span className="wipe-icon">{wipeState.complete ? "✓" : "×"}</span>
+            <span className="wipe-icon">{wipeState.complete ? "OK" : "X"}</span>
             <p className="eyebrow">Ephemeral session</p>
-            <h2>{wipeState.complete ? "Nothing remains." : "Destroying the graph…"}</h2>
+            <h2>{wipeState.complete ? "Nothing remains." : "Destroying the graph..."}</h2>
             {wipeState.counts && (
               <p>
-                {wipeState.counts.findings || 0} findings ·{" "}
-                {wipeState.counts.vault_entries || 0} raw values ·{" "}
+                {wipeState.counts.findings || 0} findings,{" "}
+                {wipeState.counts.vault_entries || 0} raw values,{" "}
                 {wipeState.counts.attack_paths || 0} attack paths destroyed
               </p>
             )}

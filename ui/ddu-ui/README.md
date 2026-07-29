@@ -12,7 +12,7 @@ experience backed by `services/ddu-mirror-intel`.
   - lit pink edges = active attack paths
   - new findings animate into the scene after approval
 - WebSocket approve/reject/expand command transport with REST fallback
-- optimistic **That’s not me** pruning, reconciled with the server snapshot
+- optimistic **That's not me** pruning, reconciled with the server snapshot
 - remediation simulation with visible before/after score
   - reversible nodes go dark
   - irreversible nodes refuse and display `PERMANENT`
@@ -63,7 +63,7 @@ ELEVENLABS_TTS_MODEL=eleven_multilingual_v2
 ```
 
 Without those credentials, typed questions remain grounded and functional,
-and the browser’s speech synthesis is used for playback. Microphone
+and the browser's speech synthesis is used for playback. Microphone
 transcription intentionally returns a configuration error rather than sending
 audio anywhere unexpected.
 
