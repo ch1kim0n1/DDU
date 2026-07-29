@@ -19,7 +19,7 @@
     "@sentry/react": "9.40.0",
     "cytoscape": "3.34.0",
     "gsap": "3.13.0",
-    "maplibre-gl": "4.7.1",
+    "maplibre-gl": "6.0.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "recharts": "3.10.1",
