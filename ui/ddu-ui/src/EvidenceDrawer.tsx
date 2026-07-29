@@ -77,6 +77,9 @@ export function EvidenceDrawer({
           <span className={`state-chip state-${finding.verification_state}`}>
             {finding.verification_state}
           </span>
+          {finding.source === "mock:generator" && (
+            <span className="data-tag mock">MOCK</span>
+          )}
         </div>
         <button className="icon-button" onClick={onClose} aria-label="Close evidence drawer">
           X

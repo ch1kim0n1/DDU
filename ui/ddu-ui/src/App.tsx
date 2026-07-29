@@ -57,6 +57,10 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [dataMode, setDataMode] = useState<"mock" | "real">(() => {
+    const stored = localStorage.getItem("ddu.dataMode");
+    return stored === "real" ? "real" : "mock";
+  });
   const [socketState, setSocketState] = useState<"connecting" | "live" | "fallback">(
     "connecting",
   );
@@ -106,36 +110,38 @@ export default function App() {
     }
   }, []);
 
-  const startDemo = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    const id = `sess_demo_${Date.now().toString(36)}`;
-    try {
-      await mirrorApi.health();
-      const seedMocks =
-        import.meta.env.VITE_MIRROR_SEED_MOCKS === "true" ||
-        (import.meta.env.DEV && import.meta.env.VITE_MIRROR_SEED_MOCKS !== "false");
-      const created = await mirrorApi.createSession(id, "scammer", seedMocks);
-      setSnapshot(created.snapshot);
-      const liveSessionId = created.session_id;
-      connectSocket(liveSessionId);
-      await mirrorApi.plan(liveSessionId);
-      setSnapshot(await mirrorApi.snapshot(liveSessionId));
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "The Mirror intelligence service is unavailable.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [connectSocket]);
+  const startDemo = useCallback(
+    async (mode: "mock" | "real") => {
+      setLoading(true);
+      setError("");
+      const id = `sess_demo_${Date.now().toString(36)}`;
+      try {
+        await mirrorApi.health();
+        const seedMocks = mode === "mock";
+        const created = await mirrorApi.createSession(id, "scammer", seedMocks);
+        setSnapshot(created.snapshot);
+        const liveSessionId = created.session_id;
+        connectSocket(liveSessionId);
+        await mirrorApi.plan(liveSessionId);
+        setSnapshot(await mirrorApi.snapshot(liveSessionId));
+      } catch (reason) {
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "The Mirror intelligence service is unavailable.",
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [connectSocket],
+  );
 
   useEffect(() => {
-    void startDemo();
+    void startDemo(dataMode);
     return () => socketRef.current?.close();
-  }, [startDemo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataMode]);
 
   async function command(
     action: string,
@@ -267,6 +273,17 @@ export default function App() {
     }
   }
 
+  function switchDataMode(mode: "mock" | "real") {
+    if (mode === dataMode || Boolean(busy) || wipeState.active) return;
+    localStorage.setItem("ddu.dataMode", mode);
+    setDataMode(mode);
+    setSelected(null);
+    setSimulation(null);
+    setFixedIds(new Set());
+    setHiddenIds(new Set());
+    socketRef.current?.close();
+  }
+
   const findings = activeFindings(snapshot);
   const remediation = useMemo(
     () =>
@@ -296,7 +313,7 @@ export default function App() {
         <h1>The experience is built. The intelligence service is not running.</h1>
         <p>{error}</p>
         <code>python services/ddu-mirror-intel/app.py</code>
-        <button onClick={() => void startDemo()} type="button">
+        <button onClick={() => void startDemo(dataMode)} type="button">
           Retry connection
         </button>
       </div>
@@ -313,17 +330,55 @@ export default function App() {
             <small>Start with yourself. See what they'd see.</small>
           </div>
         </div>
-        <div className="session-posture">
-          <span className={`live-dot ${socketState}`} />
-          <div>
-            <strong>{socketState === "live" ? "LIVE GRAPH" : "REST FALLBACK"}</strong>
-            <small>Ephemeral, auto-destroy on exit</small>
+        <div className="header-controls">
+          <div className="data-mode-toggle" role="group" aria-label="Data source">
+            <button
+              className={dataMode === "mock" ? "active mock" : ""}
+              disabled={Boolean(busy) || wipeState.active}
+              onClick={() => switchDataMode("mock")}
+              type="button"
+            >
+              Mock
+            </button>
+            <button
+              className={dataMode === "real" ? "active real" : ""}
+              disabled={Boolean(busy) || wipeState.active}
+              onClick={() => switchDataMode("real")}
+              type="button"
+            >
+              Real
+            </button>
           </div>
-          <button onClick={() => void wipe()} type="button">
-            End & wipe
-          </button>
+          <div className="session-posture">
+            <span className={`live-dot ${socketState}`} />
+            <div>
+              <strong>{socketState === "live" ? "LIVE GRAPH" : "REST FALLBACK"}</strong>
+              <small>Ephemeral, auto-destroy on exit</small>
+            </div>
+            <button onClick={() => void wipe()} type="button">
+              End & wipe
+            </button>
+          </div>
         </div>
       </header>
+      {dataMode === "mock" && (
+        <div className="data-mode-banner" role="status">
+          <strong>MOCK DATA</strong>
+          <span>
+            Synthetic findings for development and demo. Not real intelligence.
+            Toggle to Real for live discovery.
+          </span>
+        </div>
+      )}
+      {dataMode === "real" && (
+        <div className="data-mode-banner real" role="status">
+          <strong>REAL DATA</strong>
+          <span>
+            Live discovery mode. Graph starts empty - approve proposals to
+            collect real findings.
+          </span>
+        </div>
+      )}
 
       <main className="mirror-main">
         <section className="risk-headline">
@@ -462,6 +517,9 @@ export default function App() {
                         <span>
                           {proposal.touches_external.length ? "EXTERNAL" : "LOCAL ONLY"}
                         </span>
+                        {dataMode === "mock" && (
+                          <span className="data-tag mock">MOCK</span>
+                        )}
                       </div>
                       <h3>{proposal.title}</h3>
                       <p>{proposal.rationale}</p>
@@ -521,6 +579,7 @@ export default function App() {
                       <strong>{finding.label}</strong>
                       <small>
                         {finding.reversible ? finding.remediation.effort : "irreversible"}
+                        {finding.source === "mock:generator" && " - mock"}
                       </small>
                     </span>
                   </label>
@@ -560,6 +619,9 @@ export default function App() {
               </div>
               <span>{snapshot.attack_paths.length} active</span>
             </div>
+            {dataMode === "mock" && (
+              <p className="data-note">Paths below are synthetic mock chains.</p>
+            )}
             {snapshot.attack_paths.length === 0 ? (
               <p className="empty-copy">Rejected or remediated links have broken every path.</p>
             ) : (
