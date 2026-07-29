@@ -2,7 +2,7 @@
  * Engineer C → A drop-in: client-side liveness challenge.
  *
  * MediaPipe FaceLandmarker runs in the browser. Only one verified frame is
- * uploaded after the challenge passes — a real privacy property.
+ * uploaded after the challenge passes - a real privacy property.
  *
  * Props keep this mountable inside Engineer A's consent flow without
  * coupling to the rest of the Mirror shell.
@@ -180,11 +180,11 @@ export function LivenessChallenge({
         };
         rafRef.current = requestAnimationFrame(tick);
       } catch {
-        // Camera works; MediaPipe unavailable — operator can force pass/fail for demo.
+        // Camera works; MediaPipe unavailable - operator can force pass/fail for demo.
         setMediapipeReady(false);
         setPhase("running");
         setError(
-          "MediaPipe unavailable in this browser — use Pass/Fail controls (camera still local).",
+          "MediaPipe unavailable in this browser - use Pass/Fail controls (camera still local).",
         );
       }
     } catch (reason) {
@@ -212,7 +212,7 @@ export function LivenessChallenge({
         <h3>Live face check</h3>
         <p>
           FaceMesh runs in your browser. Only one verified frame uploads after
-          you pass — never a video stream.
+          you pass - never a video stream.
         </p>
       </header>
 
@@ -252,10 +252,10 @@ export function LivenessChallenge({
 
       {phase === "passed" ? (
         <p className="liveness-ok">
-          Passed. Ephemeral template TTL: {ttl ?? "—"}s remaining.
+          Passed. Ephemeral template TTL: {ttl ?? "-"}s remaining.
         </p>
       ) : null}
-      {phase === "failed" ? <p className="liveness-fail">Challenge failed — no frame kept.</p> : null}
+      {phase === "failed" ? <p className="liveness-fail">Challenge failed - no frame kept.</p> : null}
       {phase === "skipped" ? (
         <p className="liveness-skip">Face path skipped. No dangling biometric state.</p>
       ) : null}

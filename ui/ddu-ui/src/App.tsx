@@ -348,7 +348,7 @@ export default function App() {
             <h1>
               {score.band === "critical" || score.band === "severe"
                 ? "Your public footprint can be chained into an attack."
-                : "Your exposure is visible — and partly fixable."}
+                : "Your exposure is visible - and partly fixable."}
             </h1>
             <p>
               {score.contributing_findings} live findings ·{" "}
@@ -361,7 +361,7 @@ export default function App() {
             <strong>{score.score}</strong>
             <i>→</i>
             <span>AFTER FIXES</span>
-            <strong>{simulation?.score_projected.score ?? "—"}</strong>
+            <strong>{simulation?.score_projected.score ?? "-"}</strong>
           </div>
         </section>
 

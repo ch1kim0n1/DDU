@@ -5,12 +5,13 @@ import * as THREE from "three";
 
 import type {AttackPath, Finding} from "./mirror-types";
 
+// Blueprint-derived palette: green3=confirmed, blue5=likely, orange3=hypothesis
 const STATE_COLORS: Record<Finding["verification_state"], string> = {
-  confirmed: "#75f1c7",
-  likely: "#8bb9ff",
-  hypothesis: "#f8c36a",
-  contradicted: "#a678e8",
-  rejected: "#4b5260",
+  confirmed: "#238551",
+  likely: "#8abbff",
+  hypothesis: "#c87619",
+  contradicted: "#9d3f9d",
+  rejected: "#404854",
 };
 
 interface LayoutNode {
@@ -116,7 +117,7 @@ function RiskNode({
       <mesh position={[0, height / 2, 0]} castShadow>
         <cylinderGeometry args={[0.34, 0.48, height, 18]} />
         <meshStandardMaterial
-          color={remediated ? "#202632" : baseColor}
+          color={remediated ? "#2f343c" : baseColor}
           emissive={remediated ? "#000000" : baseColor}
           emissiveIntensity={0.6}
           metalness={0.5}
@@ -127,7 +128,7 @@ function RiskNode({
       <mesh position={[0, height + 0.08, 0]}>
         <sphereGeometry args={[0.42, 20, 20]} />
         <meshStandardMaterial
-          color={remediated ? "#232a35" : baseColor}
+          color={remediated ? "#383e47" : baseColor}
           emissive={remediated ? "#000000" : baseColor}
           emissiveIntensity={remediated ? 0 : 0.9}
           roughness={0.22}
@@ -137,10 +138,10 @@ function RiskNode({
         <Text
           anchorX="center"
           anchorY="bottom"
-          color="#eef4ff"
+          color="#f6f7f9"
           fontSize={0.28}
           maxWidth={3.2}
-          outlineColor="#07090d"
+          outlineColor="#111418"
           outlineWidth={0.025}
           position={[0, height + 0.72, 0]}
           textAlign="center"
@@ -150,10 +151,10 @@ function RiskNode({
       )}
       {refused && (
         <Text
-          color="#ff8d7b"
+          color="#cd4246"
           fontSize={0.22}
           position={[0, 0.22, 0.56]}
-          outlineColor="#07090d"
+          outlineColor="#111418"
           outlineWidth={0.02}
         >
           PERMANENT
@@ -197,13 +198,13 @@ function SceneContents({
 
   return (
     <>
-      <color attach="background" args={["#07090d"]} />
-      <fog attach="fog" args={["#07090d", 11, 30]} />
+      <color attach="background" args={["#111418"]} />
+      <fog attach="fog" args={["#111418", 11, 30]} />
       <ambientLight intensity={0.7} />
       <directionalLight castShadow intensity={2.2} position={[5, 12, 4]} />
-      <pointLight color="#6c80ff" intensity={35} position={[-6, 5, -8]} />
+      <pointLight color="#2d72d2" intensity={35} position={[-6, 5, -8]} />
       <gridHelper
-        args={[34, 34, "#27303d", "#141a23"]}
+        args={[34, 34, "#383e47", "#252a31"]}
         position={[0, -0.02, -5]}
       />
       {edges.map(({node, parent, pathLit}) => {
@@ -215,7 +216,7 @@ function SceneContents({
         );
         return (
           <Line
-            color={pathLit ? "#ff4f9a" : "#3a4658"}
+            color={pathLit ? "#db2c6f" : "#383e47"}
             dashed={!pathLit}
             dashScale={pathLit ? 1 : 3}
             key={`${parent.finding.id}:${node.finding.id}`}

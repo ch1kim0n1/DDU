@@ -80,7 +80,7 @@ export function MirrorMap({
       const element = document.createElement("button");
       element.className = `mirror-map-marker state-${finding.verification_state}`;
       element.type = "button";
-      element.title = `${finding.label} — approximate, privacy-jittered location`;
+      element.title = `${finding.label} - approximate, privacy-jittered location`;
       element.addEventListener("click", () => onSelect(finding));
       markers.push(
         new maplibregl.Marker({element})

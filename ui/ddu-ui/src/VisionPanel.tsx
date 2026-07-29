@@ -1,5 +1,5 @@
 /**
- * Engineer C photo intelligence panel — demo asset one-click + file upload.
+ * Engineer C photo intelligence panel - demo asset one-click + file upload.
  */
 
 import {useEffect, useState} from "react";
@@ -171,7 +171,7 @@ export function VisionPanel({
         <div className="vision-payoff-cue" role="status">
           <p>
             <strong>{cue.count} new findings</strong> are in the graph
-            {cue.preferredView === "map" ? " — GPS landed on the map." : "."}
+            {cue.preferredView === "map" ? " - GPS landed on the map." : "."}
           </p>
           <div className="vision-payoff-actions">
             <button
