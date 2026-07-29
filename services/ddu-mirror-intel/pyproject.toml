@@ -12,7 +12,7 @@ dependencies = [
     "exifread==3.0.0",
     "fastapi==0.136.3",
     "httpx==0.28.1",
-    "langgraph==1.2.9",
+    "langgraph==1.2.10",
     "langgraph-checkpoint-redis==0.5.1",
     "langgraph-checkpoint-sqlite==3.1.0",
     "Pillow==11.3.0",
