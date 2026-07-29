@@ -97,13 +97,17 @@ export const mirrorApi = {
     sessionId: string,
     persona = "scammer",
     seedMockFindings = true,
+    emails: string[] = ["demo@ddu-mirror.local"],
+    handles: string[] = ["demo_operator"],
+    accountUrls: string[] = [],
   ) =>
     request<{session_id: string; snapshot: SessionSnapshot}>("/intel/session", {
       method: "POST",
       body: JSON.stringify({
         session_id: sessionId,
-        emails: ["demo@ddu-mirror.local"],
-        handles: ["demo_operator"],
+        emails,
+        handles,
+        account_urls: accountUrls,
         persona,
         seed_mock_findings: seedMockFindings,
       }),
@@ -112,10 +116,10 @@ export const mirrorApi = {
   snapshot: (sessionId: string) =>
     request<SessionSnapshot>(`/intel/session/${encodeURIComponent(sessionId)}`),
 
-  plan: (sessionId: string) =>
+  plan: (sessionId: string, state = "TX", county = "Travis") =>
     request<{proposals: SessionSnapshot["pending_proposals"]}>("/intel/scan/plan", {
       method: "POST",
-      body: JSON.stringify({session_id: sessionId, state: "TX", county: "Travis"}),
+      body: JSON.stringify({session_id: sessionId, state, county}),
     }),
 
   approve: (sessionId: string, proposalId: string) =>

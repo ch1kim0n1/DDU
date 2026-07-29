@@ -3,6 +3,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {EvidenceDrawer} from "./EvidenceDrawer";
 import {mirrorApi, websocketURL} from "./mirror-api";
 import {MirrorMap} from "./MirrorMap";
+import {OnboardingWizard, type OnboardingData} from "./OnboardingWizard";
 import {Scene3D} from "./Scene3D";
 import type {
   Finding,
@@ -61,6 +62,8 @@ export default function App() {
     const stored = localStorage.getItem("ddu.dataMode");
     return stored === "real" ? "real" : "mock";
   });
+  const [showWizard, setShowWizard] = useState(false);
+  const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
   const [socketState, setSocketState] = useState<"connecting" | "live" | "fallback">(
     "connecting",
   );
@@ -111,18 +114,33 @@ export default function App() {
   }, []);
 
   const startDemo = useCallback(
-    async (mode: "mock" | "real") => {
+    async (mode: "mock" | "real", data?: OnboardingData | null) => {
       setLoading(true);
       setError("");
-      const id = `sess_demo_${Date.now().toString(36)}`;
+      const id = `sess_${mode}_${Date.now().toString(36)}`;
       try {
         await mirrorApi.health();
         const seedMocks = mode === "mock";
-        const created = await mirrorApi.createSession(id, "scammer", seedMocks);
+        const persona = data?.persona || "scammer";
+        const emails = data?.emails || ["demo@ddu-mirror.local"];
+        const handles = data?.handles || ["demo_operator"];
+        const accountUrls = data?.accountUrls || [];
+        const created = await mirrorApi.createSession(
+          id,
+          persona,
+          seedMocks,
+          emails,
+          handles,
+          accountUrls,
+        );
         setSnapshot(created.snapshot);
         const liveSessionId = created.session_id;
         connectSocket(liveSessionId);
-        await mirrorApi.plan(liveSessionId);
+        await mirrorApi.plan(
+          liveSessionId,
+          data?.state || "TX",
+          data?.county || "Travis",
+        );
         setSnapshot(await mirrorApi.snapshot(liveSessionId));
       } catch (reason) {
         setError(
@@ -138,7 +156,14 @@ export default function App() {
   );
 
   useEffect(() => {
-    void startDemo(dataMode);
+    if (dataMode === "mock") {
+      void startDemo("mock");
+    } else if (onboardingData) {
+      void startDemo("real", onboardingData);
+    } else {
+      setShowWizard(true);
+      setLoading(false);
+    }
     return () => socketRef.current?.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataMode]);
@@ -281,7 +306,21 @@ export default function App() {
     setSimulation(null);
     setFixedIds(new Set());
     setHiddenIds(new Set());
+    setOnboardingData(null);
+    setShowWizard(false);
+    setSnapshot(null);
     socketRef.current?.close();
+  }
+
+  function handleWizardComplete(data: OnboardingData) {
+    setOnboardingData(data);
+    setShowWizard(false);
+    void startDemo("real", data);
+  }
+
+  function handleWizardCancel() {
+    setShowWizard(false);
+    switchDataMode("mock");
   }
 
   const findings = activeFindings(snapshot);
@@ -295,6 +334,17 @@ export default function App() {
   );
   const refusedIds = new Set(simulation?.refused || []);
   const score = snapshot?.score;
+
+  if (showWizard) {
+    return (
+      <OnboardingWizard
+        busy={loading}
+        error={error}
+        onComplete={handleWizardComplete}
+        onCancel={handleWizardCancel}
+      />
+    );
+  }
 
   if (loading) {
     return (
@@ -313,7 +363,7 @@ export default function App() {
         <h1>The experience is built. The intelligence service is not running.</h1>
         <p>{error}</p>
         <code>python services/ddu-mirror-intel/app.py</code>
-        <button onClick={() => void startDemo(dataMode)} type="button">
+        <button onClick={() => void startDemo(dataMode, onboardingData)} type="button">
           Retry connection
         </button>
       </div>
