@@ -24,7 +24,7 @@ dependencies = [
     "redis==7.2.2",
     "sentry-sdk[fastapi]==2.32.0",
     "slowapi==0.1.9",
-    "uvicorn[standard]==0.44.0",
+    "uvicorn[standard]==0.52.0",
 ]
 
 # Optional on purpose. The service boots, scans, scores, and demos without
