@@ -28,7 +28,7 @@
   "devDependencies": {
     "@playwright/test": "1.62.0",
     "@testing-library/jest-dom": "6.6.3",
-    "@testing-library/react": "16.3.0",
+    "@testing-library/react": "16.3.2",
     "@types/cytoscape": "3.21.9",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
