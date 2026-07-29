@@ -34,7 +34,7 @@ dependencies = [
 # from a blank screen.
 [project.optional-dependencies]
 llm = ["anthropic==0.116.0"]
-discovery = ["sherlock-project==0.15.0"]
+discovery = ["sherlock-project==0.16.0"]
 # Only needed to regenerate curated demo JPEGs with GPS EXIF.
 vision-assets = ["piexif==1.1.3"]
 
