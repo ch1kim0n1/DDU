@@ -23,7 +23,9 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "recharts": "3.10.1",
-    "three": "0.185.1"
+    "three": "0.185.1",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
   },
   "devDependencies": {
     "@playwright/test": "1.62.0",
@@ -32,8 +34,10 @@
     "@types/cytoscape": "3.21.9",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "@types/topojson-client": "^3.1.5",
     "@vitejs/plugin-react": "6.0.4",
     "jsdom": "26.1.0",
+    "simple-icons": "^16.27.1",
     "typescript": "5.9.3",
     "vite": "8.1.5",
     "vite-bundle-visualizer": "1.2.1",

@@ -1221,3 +1221,27 @@ body {
   .find-card { transition: none; }
   .steps-row article:hover { transform: none; }
 }
+
+/* Marquee entries now carry a real logo beside the name. */
+.strip-track span {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14.5px;
+  letter-spacing: 0.01em;
+  color: var(--v2-text-dim);
+  opacity: 0.86;
+  transition: opacity 0.25s var(--v2-ease);
+}
+
+.strip-track span:hover { opacity: 1; }
+.strip-track svg { flex: none; opacity: 0.92; }
+
+/* Brand marks inside the surfacing cards keep their own colour, so the tile
+   behind them stays neutral rather than tinting cyan over a red or orange
+   logo. */
+.find-icon {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--v2-hairline-hi);
+  color: var(--v2-text);
+}

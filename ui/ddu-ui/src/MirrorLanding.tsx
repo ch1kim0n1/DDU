@@ -16,9 +16,21 @@
  * know we cannot scan a third party and that nothing is kept.
  */
 
-import type {ReactNode} from "react";
+import {Suspense, lazy, type ReactNode} from "react";
 
-import {SearchGlobe} from "./SearchGlobe";
+import {BrandIcon, type BrandKey} from "./BrandIcon";
+
+/**
+ * Lazy, matching how App.tsx already defers Scene3D and MirrorMap.
+ *
+ * Importing the globe eagerly pulled three.js and react-three-fiber into the
+ * entry chunk — 235KB became 1,208KB, so the headline waited on the renderer
+ * before it could paint. Deferring it keeps first paint immediate and lets the
+ * globe fade in a beat later, which is also the nicer entrance.
+ */
+const SearchGlobe = lazy(() =>
+  import("./SearchGlobe").then((module) => ({default: module.SearchGlobe})),
+);
 
 type Props = {
   onBegin: () => void;
@@ -27,15 +39,19 @@ type Props = {
   serviceReady?: boolean;
 };
 
-const PLATFORMS = [
-  "LinkedIn",
-  "Instagram",
-  "GitHub",
-  "Reddit",
-  "X",
-  "Strava",
-  "Public records",
-  "Breach corpora",
+const PLATFORMS: {brand: BrandKey; name: string}[] = [
+  {brand: "linkedin", name: "LinkedIn"},
+  {brand: "instagram", name: "Instagram"},
+  {brand: "github", name: "GitHub"},
+  {brand: "reddit", name: "Reddit"},
+  {brand: "x", name: "X"},
+  {brand: "strava", name: "Strava"},
+  {brand: "facebook", name: "Facebook"},
+  {brand: "pinterest", name: "Pinterest"},
+  {brand: "twitch", name: "Twitch"},
+  {brand: "steam", name: "Steam"},
+  {brand: "email", name: "Breach corpora"},
+  {brand: "records", name: "Public records"},
 ];
 
 function Trust({label, children}: {label: string; children: ReactNode}) {
@@ -93,16 +109,31 @@ export function MirrorLanding({onBegin, onMockPreview, busy, serviceReady = true
           </div>
 
           <div className="hero-visual">
-            <SearchGlobe />
+            {/* Placeholder keeps the hero's height stable so the copy doesn't
+                jump when the globe chunk arrives. */}
+            <Suspense
+              fallback={
+                <div className="globe-stage">
+                  <div className="globe-halo" aria-hidden="true" />
+                  <div className="globe-fallback" aria-hidden="true" />
+                </div>
+              }
+            >
+              <SearchGlobe />
+            </Suspense>
           </div>
         </section>
 
         {/* ── surface strip ── */}
         <section className="strip">
           <p className="strip-label">Looks across</p>
+          {/* Doubled so the -50% marquee translate loops seamlessly. */}
           <div className="strip-track">
-            {[...PLATFORMS, ...PLATFORMS].map((name, index) => (
-              <span key={`${name}-${index}`}>{name}</span>
+            {[...PLATFORMS, ...PLATFORMS].map((item, index) => (
+              <span key={`${item.brand}-${index}`}>
+                <BrandIcon brand={item.brand} colored size={19} />
+                {item.name}
+              </span>
             ))}
           </div>
         </section>
