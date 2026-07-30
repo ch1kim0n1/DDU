@@ -9,10 +9,10 @@ description = "DDU ddu-ocr service"
 requires-python = ">=3.11"
 dependencies = [
     "ddu-py-common==0.0.1",
-    "fastapi==0.136.3",
+    "fastapi==0.140.13",
     "httpx==0.28.1",
     "pydantic==2.13.4",
-    "uvicorn[standard]==0.44.0",
+    "uvicorn[standard]==0.52.0",
 ]
 
 [project.optional-dependencies]

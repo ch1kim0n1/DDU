@@ -46,6 +46,15 @@ PERSONA_CHANGED = "human.changed_persona"
 SESSION_WIPED = "system.session_wiped"
 REVEAL = "human.revealed_value"
 
+#: Voice layer. The voice agent is a user-facing AI action, so a session where
+#: someone asked it six questions should not read as a session where nothing
+#: happened. VOICE_SCRUBBED is the one that earns its place in the pitch: it is
+#: proof the STT → our-scrub → LLM interception point actually fired, rather
+#: than a claim on a slide.
+VOICE_TURN = "human.voice_turn"
+VOICE_ANSWERED = "agent.voice_answered"
+VOICE_SCRUBBED = "system.voice_pii_scrubbed"
+
 
 class ActionLog:
     """Session-scoped, append-only, thread-safe."""

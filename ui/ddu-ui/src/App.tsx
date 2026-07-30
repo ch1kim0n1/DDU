@@ -19,7 +19,11 @@ import {
   websocketURL,
   type HealthResponse,
 } from "./mirror-api";
+import {IdentityGate, type Assurance} from "./IdentityGate";
+import {MirrorLanding} from "./MirrorLanding";
 import {OnboardingWizard, type OnboardingData} from "./OnboardingWizard";
+import {ScanHud, type ScanStep} from "./ScanHud";
+import {ScanScope, type ScopeChoice, type ScopeKey} from "./ScanScope";
 import type {
   Finding,
   Proposal,
@@ -98,6 +102,24 @@ export default function App() {
   });
   const [showWizard, setShowWizard] = useState(false);
   const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
+
+  /**
+   * Entry flow: landing -> identity (A's wizard) -> live face check -> scope -> app.
+   *
+   * Held in sessionStorage rather than localStorage on purpose — the session
+   * is ephemeral by design, so "where was I" should die with the tab, not
+   * outlive it.
+   */
+  const [stage, setStage] = useState<"landing" | "verify" | "scope" | "app">(() => {
+    try {
+      return sessionStorage.getItem("ddu.stage") === "app" ? "app" : "landing";
+    } catch {
+      return "landing";
+    }
+  });
+  const [assurance, setAssurance] = useState<Assurance>("email_only");
+  const [scanSteps, setScanSteps] = useState<ScanStep[]>([]);
+  const [hudVisible, setHudVisible] = useState(false);
   const [socketState, setSocketState] = useState<"connecting" | "live" | "fallback">(
     "connecting",
   );
@@ -413,15 +435,39 @@ export default function App() {
 
   async function decideProposal(proposal: Proposal, decision: "approve" | "reject") {
     if (!snapshot) return;
+    // Drive the HUD so the 3D assembling itself has a caption. Marked running
+    // before the await and settled after, so a slow step reads as working
+    // rather than as stalled.
+    setScanSteps((steps) =>
+      steps.map((s) =>
+        s.key === proposal.id
+          ? {...s, state: decision === "approve" ? "running" : "skipped"}
+          : s,
+      ),
+    );
     await run(`${decision}:${proposal.id}`, async () => {
-      await command(
-        decision === "approve" ? "proposal.approve" : "proposal.reject",
-        {proposal_id: proposal.id},
-        () =>
-          decision === "approve"
-            ? mirrorApi.approve(snapshot.session_id, proposal.id)
-            : mirrorApi.rejectProposal(snapshot.session_id, proposal.id),
-      );
+      try {
+        await command(
+          decision === "approve" ? "proposal.approve" : "proposal.reject",
+          {proposal_id: proposal.id},
+          () =>
+            decision === "approve"
+              ? mirrorApi.approve(snapshot.session_id, proposal.id)
+              : mirrorApi.rejectProposal(snapshot.session_id, proposal.id),
+        );
+        setScanSteps((steps) =>
+          steps.map((s) =>
+            s.key === proposal.id
+              ? {...s, state: decision === "approve" ? "done" : "skipped"}
+              : s,
+          ),
+        );
+      } catch (reason) {
+        setScanSteps((steps) =>
+          steps.map((s) => (s.key === proposal.id ? {...s, state: "failed"} : s)),
+        );
+        throw reason;
+      }
       if (socketState !== "live") {
         setSnapshot(await mirrorApi.snapshot(snapshot.session_id));
       }
@@ -531,12 +577,65 @@ export default function App() {
   function handleWizardComplete(data: OnboardingData) {
     setOnboardingData(data);
     setShowWizard(false);
-    void startDemo("real", data);
+    // Session first (liveness needs a session id to hang the challenge off),
+    // then the live face check, then scope.
+    void startDemo("real", data).then(() => setStage("verify"));
   }
 
   function handleWizardCancel() {
     setShowWizard(false);
-    switchDataMode("mock");
+    setStage("landing");
+  }
+
+  function goToApp() {
+    setStage("app");
+    try {
+      sessionStorage.setItem("ddu.stage", "app");
+    } catch {
+      /* storage blocked — the stage just won't survive a reload */
+    }
+  }
+
+  /**
+   * Scope confirmation.
+   *
+   * The agent has already drafted every proposal it can. Anything the user
+   * didn't select is *rejected* rather than hidden, which means the decision
+   * lands in the action log as `human.rejected_proposal` with a reason. A
+   * filtered-out proposal that left no trace would be a worse answer for a
+   * track that asks for an auditable human-control trail.
+   */
+  async function handleScopeConfirm(choice: ScopeChoice) {
+    const sessionId = snapshot?.session_id;
+    if (!sessionId) {
+      goToApp();
+      return;
+    }
+    const keep = new Set<string>(choice.keys as ScopeKey[]);
+    const pending = snapshot?.pending_proposals || [];
+    const declined = pending.filter((p) => !keep.has(p.step as ScopeKey));
+
+    await run("scope", async () => {
+      for (const proposal of declined) {
+        try {
+          await mirrorApi.rejectProposal(
+            sessionId,
+            proposal.id,
+            "Outside the scope the operator chose",
+          );
+        } catch {
+          /* a single rejection failing must not strand the user on this screen */
+        }
+      }
+      setSnapshot(await mirrorApi.snapshot(sessionId));
+    });
+
+    const remaining = pending.filter((p) => keep.has(p.step as ScopeKey));
+    setScanSteps(
+      remaining.map((p) => ({key: p.id, label: p.title, state: "pending" as const})),
+    );
+    setHudVisible(remaining.length > 0);
+    goToApp();
   }
 
   const findings = activeFindings(snapshot);
@@ -558,6 +657,49 @@ export default function App() {
         error={error}
         onComplete={handleWizardComplete}
         onCancel={handleWizardCancel}
+      />
+    );
+  }
+
+  // ── Entry flow ────────────────────────────────────────────────────────
+  // Ordered before the boot/service-error returns so someone arriving cold
+  // sees a title page rather than a spinner or a stack-trace-shaped error.
+
+  if (stage === "landing") {
+    return (
+      <MirrorLanding
+        busy={Boolean(busy) || loading}
+        onBegin={() => setShowWizard(true)}
+        onMockPreview={() => {
+          if (dataMode !== "mock") switchDataMode("mock");
+          else void startDemo("mock");
+          goToApp();
+        }}
+        serviceReady={providerHealth ? true : true}
+      />
+    );
+  }
+
+  if (stage === "verify" && snapshot) {
+    return (
+      <IdentityGate
+        onBack={() => setStage("landing")}
+        onVerified={(level) => {
+          setAssurance(level);
+          setStage("scope");
+        }}
+        sessionId={snapshot.session_id}
+      />
+    );
+  }
+
+  if (stage === "scope" && snapshot) {
+    return (
+      <ScanScope
+        assurance={assurance}
+        busy={Boolean(busy)}
+        onBack={() => setStage("verify")}
+        onConfirm={(choice) => void handleScopeConfirm(choice)}
       />
     );
   }
@@ -588,6 +730,13 @@ export default function App() {
 
   return (
     <div className={`mirror-app ${wipeState.active ? "is-wiping" : ""}`}>
+      {hudVisible && scanSteps.length > 0 && !wipeState.active ? (
+        <ScanHud
+          nodeCount={findings.length}
+          onDismiss={() => setHudVisible(false)}
+          steps={scanSteps}
+        />
+      ) : null}
       {envBanner ? (
         <div className="data-mode-banner" role="status">
           <strong>Config</strong>

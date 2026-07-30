@@ -164,13 +164,17 @@ export const mirrorApi = {
       body: JSON.stringify({session_id: sessionId, proposal_id: proposalId}),
     }),
 
-  rejectProposal: (sessionId: string, proposalId: string) =>
+  // `reason` is surfaced in the action log, so let callers say *why* rather
+  // than logging the same generic sentence for every decline. Scope selection
+  // and a one-off reject are different human decisions and should read
+  // differently in the audit trail.
+  rejectProposal: (sessionId: string, proposalId: string, reason?: string) =>
     request("/intel/scan/reject", {
       method: "POST",
       body: JSON.stringify({
         session_id: sessionId,
         proposal_id: proposalId,
-        reason: "Operator declined this expansion.",
+        reason: reason || "Operator declined this expansion.",
       }),
     }),
 

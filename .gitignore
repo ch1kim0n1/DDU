@@ -42,3 +42,10 @@ build/
 .idea/
 .vscode/
 *.swp
+
+# Runtime service logs
+logs/
+
+# Playwright run output
+ui/ddu-ui/test-results/
+ui/ddu-ui/playwright-report/

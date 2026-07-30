@@ -949,6 +949,41 @@ async def voice_turn(body: VoiceTurnRequest, request: Request) -> dict[str, Any]
     except Exception as exc:
         log.exception("voice turn failed")
         raise HTTPException(status_code=502, detail=f"voice provider failed: {exc}") from exc
+
+    # Track 3: the voice agent is a user-facing AI action, so it belongs in the
+    # action log. Deliberately metadata only — the transcript is the user's own
+    # speech and never enters the log, even scrubbed (voice PII discipline).
+    session.log.record(
+        A.VOICE_TURN,
+        actor=Origin.HUMAN,
+        subject=body.mode,
+        detail=f"Operator used the voice agent ({body.mode}).",
+        mode=body.mode,
+        input="audio" if body.audio_base64 else "text",
+        stt_provider=result.stt_provider,
+    )
+    if result.transcript_redacted:
+        # The interception point, evidenced. This is the line that proves the
+        # scrub sits between the vendor's STT and any model we call.
+        session.log.record(
+            A.VOICE_SCRUBBED,
+            actor=Origin.SYSTEM,
+            subject=body.session_id,
+            detail="PII scrubbed from the transcript before it reached any model.",
+            replacements=result.replacements,
+        )
+    session.log.record(
+        A.VOICE_ANSWERED,
+        actor=Origin.AGENT,
+        subject=body.mode,
+        detail=(
+            f"Voice agent answered, grounded in {len(result.grounded_finding_ids)} finding(s)."
+        ),
+        grounded_finding_ids=result.grounded_finding_ids,
+        llm_provider=result.llm_provider,
+        tts_provider=result.tts_provider,
+        offline=result.offline,
+    )
     return result.as_dict()
 
 
