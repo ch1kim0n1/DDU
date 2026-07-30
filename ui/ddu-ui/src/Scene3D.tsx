@@ -132,17 +132,36 @@ function RiskNode({
   const height = 0.55 + severity * 2.9;
   const baseColor = STATE_COLORS[item.finding.verification_state];
 
+  // Materialisation. Nodes already grew in from nothing, but fast enough that
+  // it read as a pop rather than as the graph assembling. Staggering the entry
+  // by hop depth makes the Z axis do narrative work: the verified seed lands
+  // first, then everything one hop out, then two — the same outward walk the
+  // attack-path narratives describe, happening in front of you.
+  const bornAt = useRef(0);
+  const delay = Math.min(item.finding.hop_depth, 6) * 0.16;
+
   useEffect(() => {
     if (group.current) group.current.scale.setScalar(0.001);
+    bornAt.current = 0;
   }, []);
 
   useFrame((state, delta) => {
     if (!group.current) return;
+    if (bornAt.current === 0) bornAt.current = state.clock.elapsedTime;
+    const age = state.clock.elapsedTime - bornAt.current - delay;
+
+    if (age < 0) {
+      // Not its turn yet — stay hidden rather than sitting at full size.
+      group.current.scale.setScalar(0.001);
+      return;
+    }
+
     const target = remediated ? 0.88 : selected || hovered ? 1.12 : 1;
-    group.current.scale.lerp(
-      new THREE.Vector3(target, target, target),
-      1 - Math.pow(0.001, delta),
-    );
+    // Slower while emerging (0.35s-ish), then snappy for hover/selection so
+    // interaction stays responsive once the node has settled.
+    const emerging = age < 0.55;
+    const rate = emerging ? 1 - Math.pow(0.06, delta) : 1 - Math.pow(0.001, delta);
+    group.current.scale.lerp(new THREE.Vector3(target, target, target), rate);
     if (refused) {
       group.current.rotation.y = Math.sin(state.clock.elapsedTime * 8) * 0.08;
     }

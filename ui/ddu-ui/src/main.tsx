@@ -3,6 +3,10 @@ import {createRoot} from "react-dom/client";
 
 import App from "./App";
 import "./styles.css";
+// Loaded after the base sheet so it can override it. Contains the 3D
+// canvas-height fix and the cinematic glass layer; delete this one import
+// to revert the whole visual pass.
+import "./mirror-v2.css";
 
 async function boot() {
   const dsn = import.meta.env.VITE_SENTRY_DSN;
