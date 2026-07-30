@@ -1245,3 +1245,226 @@ body {
   border-color: var(--v2-hairline-hi);
   color: var(--v2-text);
 }
+
+/* ═════════════════════════════════════════════════════════════════════
+   9. FACE CHECK — circular scan with a progress ring
+   ═════════════════════════════════════════════════════════════════════
+   Modelled on the Face ID / age-check pattern: a round window with your
+   own face in it, landmark dots painted over the features being tracked,
+   and a ring that fills as the challenge completes. The dots matter — a
+   camera preview with no visible tracking gives the user no way to tell
+   whether anything is happening, which is what made the previous freeze
+   so hard to notice.
+   ───────────────────────────────────────────────────────────────────── */
+
+.liveness-challenge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.face-scan {
+  position: relative;
+  width: min(280px, 74vw);
+  aspect-ratio: 1;
+  flex: none;
+}
+
+/* Progress ring */
+.face-scan-ring {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.face-scan-ring svg {
+  width: 100%;
+  height: 100%;
+  /* Start the sweep at 12 o'clock rather than 3. */
+  transform: rotate(-90deg);
+  overflow: visible;
+}
+
+.ring-track {
+  fill: none;
+  stroke: rgba(150, 175, 210, 0.16);
+  stroke-width: 2.2;
+}
+
+.ring-progress {
+  fill: none;
+  stroke: var(--v2-accent);
+  stroke-width: 2.8;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px var(--v2-accent-glow));
+  transition: stroke-dashoffset 0.22s var(--v2-ease);
+}
+
+.face-scan.is-passed .ring-progress { stroke: #72ca9b; filter: drop-shadow(0 0 8px rgba(114, 202, 155, 0.6)); }
+
+/* Circular camera window */
+.face-scan-window {
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #04070b;
+  border: 1px solid var(--v2-hairline);
+  display: grid;
+  place-items: center;
+}
+
+.face-scan.is-active .face-scan-window {
+  border-color: var(--v2-accent-dim);
+  box-shadow: inset 0 0 34px -6px rgba(79, 214, 255, 0.28);
+}
+
+.face-scan-window video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Selfie view. NOTE: detection reads the raw feed, so anything comparing
+     landmark x against a direction must account for this — see the yaw comment
+     in LivenessChallenge.tsx. */
+  transform: scaleX(-1);
+}
+
+/* Landmark dots, mirrored in canvas to match the video above. */
+.face-scan-mesh {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+.face-scan-idle {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: var(--v2-text-faint);
+}
+
+.face-scan-idle span { font-size: 30px; opacity: 0.5; }
+.face-scan-idle p { margin: 0; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
+
+.face-scan-done {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(6, 20, 14, 0.72);
+  backdrop-filter: blur(3px);
+  animation: v2-fade 0.35s var(--v2-ease) both;
+}
+
+.face-scan-done span {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+  color: #04222c;
+  background: linear-gradient(140deg, #9fe6c0, #72ca9b);
+  box-shadow: 0 0 30px rgba(114, 202, 155, 0.55);
+  animation: v2-pop 0.42s var(--v2-ease) both;
+}
+
+@keyframes v2-pop {
+  from { transform: scale(0.4); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Sweep across the window while active */
+.face-scan.is-active .face-scan-window::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--v2-accent), transparent);
+  box-shadow: 0 0 14px var(--v2-accent);
+  animation: v2-sweep 2.4s var(--v2-ease) infinite;
+  z-index: 1;
+}
+
+.face-scan.is-passed .face-scan-window::after { display: none; }
+
+/* Instruction pill */
+.face-prompt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  border-radius: 999px;
+  background: rgba(79, 214, 255, 0.1);
+  border: 1px solid var(--v2-accent-dim);
+  font-size: 14px;
+  color: var(--v2-text);
+  max-width: 100%;
+}
+
+.face-prompt.is-searching {
+  background: rgba(236, 154, 60, 0.1);
+  border-color: rgba(236, 154, 60, 0.4);
+}
+
+.face-prompt strong { font-weight: 600; }
+.face-prompt em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  color: var(--v2-accent);
+  font-weight: 650;
+  font-size: 13px;
+}
+
+.face-prompt .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--v2-accent);
+  animation: v2-pulse 1.15s ease-in-out infinite;
+  flex: none;
+}
+
+.face-prompt.is-searching .dot { background: var(--bp-orange4); }
+
+.liveness-challenge .liveness-hint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--v2-text-dim);
+  text-align: center;
+  max-width: 42ch;
+}
+
+.liveness-challenge .liveness-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+.liveness-ok,
+.liveness-fail,
+.liveness-skip,
+.liveness-error {
+  margin: 0;
+  font-size: 12.5px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.liveness-ok { color: #72ca9b; }
+.liveness-fail,
+.liveness-error { color: var(--bp-red4); }
+.liveness-skip { color: var(--bp-orange4); }
+
+@media (prefers-reduced-motion: reduce) {
+  .face-scan.is-active .face-scan-window::after,
+  .face-prompt .dot,
+  .face-scan-done span { animation: none; }
+  .ring-progress { transition: none; }
+}
