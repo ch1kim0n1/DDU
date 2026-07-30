@@ -29,6 +29,43 @@ def _create(client: TestClient, session_id: str, *, seeded: bool = True) -> dict
     return response.json()["snapshot"]
 
 
+def test_voice_turns_appear_in_the_track3_action_log() -> None:
+    """Track 3 requires an action log that covers the product, not one flow.
+
+    The voice agent is a user-facing AI action. Before this, a session where
+    someone asked it six questions read as a session where nothing happened,
+    and the STT -> our-scrub -> LLM interception point had no evidence behind
+    it. The transcript itself must never be logged, even scrubbed.
+    """
+    client = _client()
+    _create(client, "s_d_voicelog")
+
+    before = client.get("/intel/actions/s_d_voicelog").json()["summary"]["total"]
+    client.post(
+        "/intel/voice/turn",
+        json={
+            "session_id": "s_d_voicelog",
+            "transcript": "Reach me at person@example.com. What should I fix first?",
+        },
+    )
+    log = client.get("/intel/actions/s_d_voicelog").json()
+    actions = [entry["action"] for entry in log["entries"]]
+
+    assert log["summary"]["total"] > before
+    assert "human.voice_turn" in actions
+    assert "agent.voice_answered" in actions
+    # The scrub fired, and the log proves it rather than asserting it.
+    assert "system.voice_pii_scrubbed" in actions
+
+    # The user's own speech never enters the log.
+    blob = str(log)
+    assert "person@example.com" not in blob
+    assert "What should I fix first" not in blob
+
+    answered = next(e for e in log["entries"] if e["action"] == "agent.voice_answered")
+    assert "grounded_finding_ids" in answered["metadata"]
+
+
 def test_voice_scrubs_pii_and_grounds_only_live_findings() -> None:
     client = _client()
     snapshot = _create(client, "s_d_voice")

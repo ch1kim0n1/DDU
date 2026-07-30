@@ -42,3 +42,6 @@ build/
 .idea/
 .vscode/
 *.swp
+
+# Runtime service logs
+logs/
