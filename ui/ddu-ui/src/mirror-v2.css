@@ -896,3 +896,328 @@ body {
   .stage, .stage-inner, .scan-hud { animation: none; }
   .proposal-card:hover, .btn-primary:hover, .scope-item:hover { transform: none; }
 }
+
+/* ═════════════════════════════════════════════════════════════════════
+   8. LANDING v2 — globe hero, Apple-scale type, Cluely-style glow
+   ═════════════════════════════════════════════════════════════════════ */
+
+.stage--landing {
+  display: block;
+  place-items: initial;
+  padding: 0;
+  overflow-y: auto;
+  background: var(--v2-void);
+}
+
+.landing-v2 {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: clamp(24px, 4vw, 56px) clamp(20px, 4vw, 40px) 80px;
+}
+
+/* ── hero ── */
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
+  gap: clamp(24px, 4vw, 56px);
+  align-items: center;
+  min-height: min(84vh, 760px);
+}
+
+.hero-copy { animation: v2-rise 0.75s var(--v2-ease) both; }
+
+.landing-v2 h1 {
+  margin: 18px 0 0;
+  /* Apple-scale: very large, very tight, weight doing the work. */
+  font-size: clamp(2.9rem, 7.4vw, 6.1rem);
+  line-height: 0.94;
+  letter-spacing: -0.043em;
+  font-weight: 700;
+  background: linear-gradient(174deg, #ffffff 4%, #b9cfe6 62%, #7f9ab4 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.landing-v2 .tagline {
+  margin: 16px 0 0;
+  font-size: clamp(1.05rem, 1.7vw, 1.4rem);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--v2-accent);
+}
+
+.landing-v2 .lede {
+  margin: 18px 0 0;
+  max-width: 52ch;
+  font-size: clamp(0.98rem, 1.18vw, 1.14rem);
+  line-height: 1.62;
+  color: var(--v2-text-dim);
+}
+
+.landing-v2 .landing-cta {
+  justify-content: flex-start;
+  margin-top: 30px;
+}
+
+.btn-lg { padding: 16px 34px; font-size: 15.5px; }
+
+.hero-fineprint {
+  margin: 18px 0 0;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  color: var(--v2-text-faint);
+}
+
+/* ── globe ── */
+
+.hero-visual {
+  position: relative;
+  animation: v2-fade 1.1s var(--v2-ease) both;
+}
+
+@keyframes v2-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.globe-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-height: 68vh;
+  margin-inline: auto;
+}
+
+.globe-stage canvas { display: block; width: 100% !important; height: 100% !important; }
+
+/* Cluely-ish saturated bloom behind the sphere. */
+.globe-halo {
+  position: absolute;
+  /* Negative inset so the bloom spills beyond the sphere silhouette — the glow
+     should look like light coming off it, not a disc behind it. */
+  inset: -14%;
+  border-radius: 50%;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(79, 214, 255, 0.34) 0%, rgba(79, 214, 255, 0.12) 38%, transparent 63%),
+    radial-gradient(circle at 72% 76%, rgba(157, 63, 157, 0.3) 0%, transparent 56%),
+    radial-gradient(circle at 26% 24%, rgba(45, 114, 210, 0.24) 0%, transparent 52%);
+  filter: blur(44px);
+  animation: v2-breathe 7.5s ease-in-out infinite;
+}
+
+/* Rim light. Sells the sphere as a lit object rather than a dot cloud. */
+.globe-stage::after {
+  content: "";
+  position: absolute;
+  inset: 9%;
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 60px -10px rgba(79, 214, 255, 0.22),
+    0 0 90px -24px rgba(79, 214, 255, 0.42);
+}
+
+@keyframes v2-breathe {
+  0%, 100% { opacity: 0.72; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.045); }
+}
+
+.globe-fallback {
+  position: absolute;
+  inset: 16%;
+  border-radius: 50%;
+  border: 1px solid var(--v2-accent-dim);
+  background: radial-gradient(circle at 38% 32%, rgba(79, 214, 255, 0.2), #05141c 68%);
+  animation: v2-breathe 7s ease-in-out infinite;
+}
+
+/* ── surfacing discovery cards ── */
+
+.globe-finds { position: absolute; inset: 0; pointer-events: none; }
+
+.find-card {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 12px 8px 9px;
+  border-radius: 11px;
+  background: rgba(14, 20, 28, 0.78);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid var(--v2-hairline-hi);
+  box-shadow: 0 12px 34px -10px rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+  /* Out state. Cards scale up and drift as they leave, so a disappearance
+     reads as "released" rather than "hidden". */
+  opacity: 0;
+  transform: translateY(6px) scale(0.94);
+  transition:
+    opacity 0.62s var(--v2-ease),
+    transform 0.62s var(--v2-ease),
+    filter 0.62s var(--v2-ease);
+  filter: blur(3px);
+}
+
+.find-card.is-in {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+.find-icon {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: var(--v2-accent);
+  background: rgba(79, 214, 255, 0.12);
+  border: 1px solid rgba(79, 214, 255, 0.24);
+}
+
+.find-icon svg { width: 15px; height: 15px; }
+
+.find-text { display: flex; flex-direction: column; line-height: 1.25; }
+.find-text b { font-size: 11.5px; font-weight: 650; color: var(--v2-text); }
+.find-text em {
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--v2-text-faint);
+  letter-spacing: 0.01em;
+}
+
+/* ── marquee strip ── */
+
+.strip {
+  margin-top: clamp(30px, 5vw, 64px);
+  padding: 20px 0;
+  border-top: 1px solid var(--v2-hairline);
+  border-bottom: 1px solid var(--v2-hairline);
+  overflow: hidden;
+}
+
+.strip-label {
+  margin: 0 0 12px;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--v2-text-faint);
+}
+
+.strip-track {
+  display: flex;
+  gap: 38px;
+  width: max-content;
+  animation: v2-marquee 26s linear infinite;
+}
+
+.strip-track span {
+  font-size: 14.5px;
+  letter-spacing: 0.01em;
+  color: var(--v2-text-dim);
+  opacity: 0.72;
+}
+
+@keyframes v2-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* ── steps band ── */
+
+.steps-band { margin-top: clamp(46px, 8vw, 104px); }
+
+.steps-band h2,
+.landing-v2 .trust-band h2 {
+  margin: 0 0 30px;
+  font-size: clamp(1.6rem, 3.4vw, 2.7rem);
+  letter-spacing: -0.028em;
+  line-height: 1.1;
+  font-weight: 650;
+  color: var(--v2-text);
+}
+
+.steps-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(212px, 1fr));
+  gap: 14px;
+}
+
+.steps-row article {
+  padding: 22px;
+  border-radius: var(--v2-radius);
+  background: var(--v2-glass);
+  border: 1px solid var(--v2-hairline);
+  backdrop-filter: blur(var(--v2-blur));
+  -webkit-backdrop-filter: blur(var(--v2-blur));
+  transition: transform 0.3s var(--v2-ease), border-color 0.3s var(--v2-ease);
+}
+
+.steps-row article:hover { transform: translateY(-3px); border-color: var(--v2-hairline-hi); }
+
+.step-n {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--v2-accent);
+  margin-bottom: 12px;
+  font-weight: 650;
+}
+
+.steps-row h3 {
+  margin: 0 0 8px;
+  font-size: 16.5px;
+  letter-spacing: -0.012em;
+  color: var(--v2-text);
+}
+
+.steps-row p { margin: 0; font-size: 13.5px; line-height: 1.58; color: var(--v2-text-dim); }
+
+/* ── trust band ── */
+
+.trust-band { margin-top: clamp(46px, 8vw, 104px); }
+
+.landing-v2 .landing-trust {
+  margin-top: 0;
+  grid-template-columns: repeat(auto-fit, minmax(226px, 1fr));
+  gap: 12px;
+}
+
+.landing-v2 .landing-trust div { padding: 18px; border-radius: var(--v2-radius); }
+
+.landing-foot {
+  margin-top: clamp(34px, 6vw, 68px);
+  padding: clamp(28px, 5vw, 52px);
+  border-radius: 20px;
+  text-align: center;
+  background:
+    radial-gradient(90% 140% at 50% 0%, rgba(79, 214, 255, 0.16), transparent 62%),
+    var(--v2-glass);
+  border: 1px solid var(--v2-hairline-hi);
+  backdrop-filter: blur(var(--v2-blur));
+  -webkit-backdrop-filter: blur(var(--v2-blur));
+}
+
+.landing-foot p { margin: 16px 0 0; font-size: 13px; color: var(--v2-text-faint); }
+
+/* ── responsive ── */
+
+@media (max-width: 940px) {
+  .hero { grid-template-columns: 1fr; min-height: 0; text-align: center; }
+  .hero-copy { order: 1; }
+  .hero-visual { order: 0; }
+  .landing-v2 .lede { margin-inline: auto; }
+  .landing-v2 .landing-cta { justify-content: center; }
+  .globe-stage { max-width: 460px; max-height: 46vh; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .globe-halo,
+  .globe-fallback,
+  .strip-track { animation: none; }
+  .find-card { transition: none; }
+  .steps-row article:hover { transform: none; }
+}
