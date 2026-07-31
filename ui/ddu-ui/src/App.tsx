@@ -849,14 +849,18 @@ export default function App() {
           steps={scanSteps}
         />
       ) : null}
+      {/* The --dev modifier: this shares the banner component with the
+          MOCK/REAL disclosure, which is deliberately loud because it is a
+          truthfulness claim. These two are developer notes, so they get
+          quieted rather than the shared component being softened. */}
       {envBanner ? (
-        <div className="data-mode-banner" role="status">
+        <div className="data-mode-banner data-mode-banner--dev" role="status">
           <strong>Config</strong>
           <span>{envBanner}</span>
         </div>
       ) : null}
       {apiVersionWarn ? (
-        <div className="data-mode-banner" role="status">
+        <div className="data-mode-banner data-mode-banner--dev" role="status">
           <strong>API</strong>
           <span>{apiVersionWarn}</span>
         </div>

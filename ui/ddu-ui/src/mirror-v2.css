@@ -1915,3 +1915,311 @@ body {
 .config-banner strong,
 .config-warning strong,
 .dev-banner strong { color: var(--v2-text-dim); font-weight: 600; }
+
+/* ═════════════════════════════════════════════════════════════════════
+   11. ONBOARDING WIZARD + REMAINING ENTRY-FLOW POLISH
+   ═════════════════════════════════════════════════════════════════════
+   The wizard is the first thing anyone sees on the real path, and it was
+   still on the pre-v2 palette — flat panels, Blueprint blue, near-invisible
+   Add buttons and an outlined Continue that read as disabled. Brought onto
+   the same glass + cyan language as the landing and face check.
+   ───────────────────────────────────────────────────────────────────── */
+
+.wizard-overlay {
+  background: rgba(4, 6, 10, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.wizard-card {
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-radius);
+  background: linear-gradient(180deg, rgba(18, 24, 33, 0.96), rgba(10, 14, 20, 0.98));
+  box-shadow: var(--v2-shadow-lift);
+  overflow: hidden;
+}
+
+.wizard-header {
+  border-bottom: 1px solid var(--v2-hairline);
+  background: rgba(10, 14, 20, 0.6);
+}
+
+.wizard-brand {
+  background: linear-gradient(140deg, #7ce7ff, var(--v2-accent));
+  color: #04222c;
+  font-weight: 800;
+  border-radius: 9px;
+}
+
+.wizard-header strong { color: var(--v2-text); letter-spacing: 0.02em; }
+.wizard-header small { color: var(--v2-text-dim); }
+
+.wizard-close {
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-radius-sm);
+  background: transparent;
+  color: var(--v2-text-dim);
+  cursor: pointer;
+  transition: all 0.16s var(--v2-ease);
+}
+
+.wizard-close:hover {
+  border-color: var(--bp-red4, #fa999c);
+  color: var(--bp-red4, #fa999c);
+  background: rgba(205, 66, 70, 0.12);
+}
+
+/* Progress: the completed segments earn the accent, the rest stay hairline. */
+.wizard-progress { background: transparent; }
+
+.wizard-progress > * {
+  height: 3px;
+  border-radius: 99px;
+  background: var(--v2-hairline);
+}
+
+.wizard-progress > .done,
+.wizard-progress > .active,
+.wizard-progress > [aria-current="step"],
+.wizard-progress > [data-state="done"] {
+  background: var(--v2-accent);
+  box-shadow: 0 0 10px var(--v2-accent-glow);
+}
+
+.wizard-step legend,
+.wizard-body h2,
+.wizard-body h3 {
+  color: var(--v2-text);
+  letter-spacing: -0.015em;
+}
+
+.wizard-intro { color: var(--v2-text-dim); line-height: 1.55; }
+
+.wizard-field > span,
+.wizard-field > label {
+  color: var(--v2-text-dim);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.wizard-input-row { gap: 8px; }
+
+.wizard-input-row input,
+.wizard-body input[type="text"],
+.wizard-body input[type="email"],
+.wizard-body input[type="url"],
+.wizard-body select {
+  padding: 11px 13px;
+  border-radius: var(--v2-radius-sm);
+  border: 1px solid var(--v2-hairline);
+  background: rgba(6, 9, 14, 0.72);
+  color: var(--v2-text);
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 0.16s var(--v2-ease), box-shadow 0.16s var(--v2-ease);
+}
+
+.wizard-input-row input::placeholder,
+.wizard-body input::placeholder { color: var(--v2-text-faint); }
+
+.wizard-input-row input:focus,
+.wizard-body input:focus,
+.wizard-body select:focus {
+  outline: none;
+  border-color: var(--v2-accent);
+  box-shadow: 0 0 0 3px var(--v2-accent-glow);
+}
+
+/* Add was grey-on-grey and read as permanently disabled. */
+.wizard-input-row button {
+  padding: 0 18px;
+  border-radius: var(--v2-radius-sm);
+  border: 1px solid var(--v2-accent-dim);
+  background: rgba(79, 214, 255, 0.1);
+  color: var(--v2-accent);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.16s var(--v2-ease);
+}
+
+.wizard-input-row button:hover:not(:disabled) {
+  background: rgba(79, 214, 255, 0.2);
+  border-color: var(--v2-accent);
+}
+
+.wizard-input-row button:disabled {
+  border-color: var(--v2-hairline);
+  background: transparent;
+  color: var(--v2-text-faint);
+  cursor: not-allowed;
+}
+
+/* Chips are proof the identifier was accepted — they should look banked. */
+.wizard-chip {
+  padding: 5px 11px;
+  border-radius: 99px;
+  border: 1px solid var(--v2-accent-dim);
+  background: rgba(79, 214, 255, 0.11);
+  color: var(--v2-accent);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.wizard-chip button {
+  background: transparent;
+  border: none;
+  color: inherit;
+  opacity: 0.65;
+  cursor: pointer;
+}
+
+.wizard-chip button:hover { opacity: 1; }
+
+.wizard-actions {
+  border-top: 1px solid var(--v2-hairline);
+  background: rgba(10, 14, 20, 0.6);
+  gap: 10px;
+}
+
+.wizard-back {
+  padding: 11px 20px;
+  border-radius: var(--v2-radius-sm);
+  border: 1px solid var(--v2-hairline);
+  background: transparent;
+  color: var(--v2-text-dim);
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: all 0.16s var(--v2-ease);
+}
+
+.wizard-back:hover:not(:disabled) {
+  border-color: var(--v2-hairline-hi);
+  color: var(--v2-text);
+}
+
+/* Continue was an outlined blue that read as disabled next to a solid
+   Cancel — the primary action looked like the secondary one. */
+.wizard-next {
+  padding: 11px 24px;
+  border-radius: var(--v2-radius-sm);
+  border: 1px solid transparent;
+  background: linear-gradient(140deg, #7ce7ff, var(--v2-accent));
+  color: #04222c;
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: filter 0.16s var(--v2-ease), transform 0.16s var(--v2-ease);
+}
+
+.wizard-next:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
+
+.wizard-next:disabled {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--v2-text-faint);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.wizard-consent-item,
+.wizard-adult {
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-radius-sm);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--v2-text-dim);
+}
+
+.wizard-error {
+  padding: 9px 12px;
+  border-radius: var(--v2-radius-sm);
+  border: 1px solid rgba(205, 66, 70, 0.4);
+  background: rgba(205, 66, 70, 0.1);
+  color: var(--bp-red4, #fa999c);
+  font-size: 12.5px;
+}
+
+/* Checkboxes and radios across the entry flow. */
+.wizard-body input[type="checkbox"],
+.wizard-body input[type="radio"],
+.liveness-consent input[type="checkbox"] { accent-color: var(--v2-accent); }
+
+/* ── dev-only banners ─────────────────────────────────────────────────
+   `.data-mode-banner` is shared with the MOCK/REAL disclosure, which must
+   stay loud — it is a claim about whether the findings are real. The dev
+   variants get demoted instead of the component being softened. */
+.data-mode-banner--dev {
+  padding: 3px 12px;
+  background: rgba(8, 11, 16, 0.95);
+  border-bottom: 1px solid var(--v2-hairline);
+  font-size: 10.5px;
+  color: var(--v2-text-faint);
+}
+
+.data-mode-banner--dev strong {
+  color: var(--v2-text-faint);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ── scan HUD ─────────────────────────────────────────────────────────
+   `min-width` is a floor, not a cap, so long step labels grew the panel
+   past the canvas and it slid under the proposal rail — covering the very
+   cards it is telling you to act on. Capped, and centred over the canvas
+   column rather than the viewport once the rail exists. */
+/* Centring here cannot use `transform: translateX(-50%)`: the panel also runs
+   `animation: v2-rise ... both`, whose keyframes set `transform`, so the
+   animation wins and the fill mode makes it stick. The panel has therefore
+   been sitting half its own width to the right of centre.
+   Anchoring with left/right + `margin-inline: auto` centres it without
+   touching transform, and insetting the right edge by the rail's width means
+   "centre" is the middle of the canvas the operator is actually looking at
+   rather than the middle of the window. */
+.scan-hud {
+  max-width: min(560px, calc(100vw - 40px));
+  transform: none;
+  margin-inline: auto;
+  left: 0;
+  right: 0;
+}
+
+/* Long step labels are what grew the panel under the rail in the first place. */
+.scan-hud .scan-steps li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* These two mirror the rail's own breakpoints in styles.css (1120px drops it
+   from 360px to 320px, 860px changes the layout entirely). They have to stay
+   in step: guessing a single 360px inset left the panel overlapping the rail
+   between 861px and 1120px, where the rail is narrower than assumed. */
+@media (min-width: 1121px) {
+  .scan-hud { right: 360px; }
+}
+
+@media (min-width: 861px) and (max-width: 1120px) {
+  /* Narrower too: the workspace is inset from the viewport, so the rail's real
+     left edge sits a little inside `100vw - 320px` and a full-width panel
+     still clipped it at the bottom of this band.
+     `min-width` has to come down with it — min-width beats max-width, so
+     capping alone left the panel at its original 560px. */
+  .scan-hud { right: 320px; min-width: 0; max-width: 460px; }
+}
+
+/* Step headings were sized like body copy, so each screen opened without a
+   clear first thing to read. Scaled to sit between the landing's display type
+   and the form labels below it. */
+.wizard-step legend,
+.wizard-body > fieldset > legend {
+  display: block;
+  width: 100%;
+  margin-bottom: 4px;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--v2-text);
+}
+
+.wizard-body { padding-top: 22px; }
