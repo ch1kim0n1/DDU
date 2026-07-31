@@ -142,7 +142,8 @@ export function VisionPanel({
     <section className="rail-section vision-panel">
       <div className="rail-title">
         <div>
-          <p className="eyebrow">Engineer C, Vision</p>
+          {/* Team-internal names ("Engineer C") do not belong in the product. */}
+          <p className="eyebrow">What your photos give away</p>
           <h2>Photo intelligence</h2>
         </div>
         <span>{demos.length}</span>

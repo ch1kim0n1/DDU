@@ -55,6 +55,41 @@ const PERSONAS = [
   {id: "state", label: "State actor"},
 ];
 
+/**
+ * Human labels for the input keys a step declares editable.
+ *
+ * The keys come from the server's allowlist, so this map is presentation only
+ * — an unmapped key still renders, under its raw name, rather than vanishing
+ * from the form. A field the operator cannot see is a field they cannot
+ * control, which would defeat the point of the checkpoint.
+ */
+const FIELD_LABELS: Record<string, string> = {
+  handle: "Username / handle to search",
+  email: "Email address to check",
+  state: "State",
+  county: "County",
+};
+
+/** Graph bookkeeping the operator has no use for when deciding. */
+const INTERNAL_INPUT_KEYS = new Set(["parent_id", "hop_depth"]);
+
+/**
+ * Editable fields that name a person rather than a place.
+ *
+ * These are the ones `assert_self` guards: the server accepts them only if the
+ * session already proved control of that identity. State and county carry no
+ * such constraint, so they take free text without a warning.
+ */
+const IDENTITY_FIELDS = new Set(["handle", "email"]);
+
+/** Proposal inputs worth showing a human, labelled and stripped of internals. */
+function readableInputs(proposal: Proposal): string[] {
+  return Object.entries(proposal.inputs || {})
+    .filter(([key, value]) => !INTERNAL_INPUT_KEYS.has(key) && value)
+    .map(([key, value]) => `${(FIELD_LABELS[key] || key).toLowerCase()} ${String(value)}`)
+    .slice(0, 4);
+}
+
 type CommandResult = {
   snapshot?: SessionSnapshot;
   payload?: Record<string, unknown>;
@@ -137,6 +172,10 @@ export default function App() {
     "all",
   );
   const [activityQuery, setActivityQuery] = useState("");
+  /** Proposal id whose edit form is open, plus the field values typed so far. */
+  const [editing, setEditing] = useState<{id: string; values: Record<string, string>} | null>(
+    null,
+  );
   const [envBanner, setEnvBanner] = useState("");
   const [apiVersionWarn, setApiVersionWarn] = useState("");
   const {toasts, push: pushToast, dismiss: dismissToast} = useToastQueue();
@@ -433,8 +472,81 @@ export default function App() {
     else setShowWizard(true);
   }
 
-  async function decideProposal(proposal: Proposal, decision: "approve" | "reject") {
+  /**
+   * Approve, edit, or reject — the whole of Track 3's human checkpoint.
+   *
+   * `edit` is an approval carrying amendments, so it drives the HUD exactly
+   * like an approval: the step runs, it just runs with the human's values.
+   * The server applies only fields the step declared editable and hands back
+   * whatever it refused under `ignored`, which is surfaced as a warning rather
+   * than dropped — a change the operator made and the system quietly discarded
+   * is the precise failure this checkpoint exists to prevent.
+   */
+  async function decideProposal(
+    proposal: Proposal,
+    decision: "approve" | "reject" | "edit",
+    changes?: Record<string, string>,
+  ) {
     if (!snapshot) return;
+    if (decision === "edit") {
+      const amended = Object.fromEntries(
+        Object.entries(changes || {})
+          .map(([key, value]) => [key, value.trim()])
+          // A blank box means "leave this as it was", not "set it to empty".
+          .filter(([, value]) => value.length > 0),
+      ) as Record<string, string>;
+
+      if (Object.keys(amended).length === 0) {
+        pushToast("Change at least one field, or use Approve instead", "warn");
+        return;
+      }
+
+      setScanSteps((steps) =>
+        steps.map((s) => (s.key === proposal.id ? {...s, state: "running"} : s)),
+      );
+      let accepted = false;
+      await run(`edit:${proposal.id}`, async () => {
+        try {
+          const result = (await mirrorApi.editProposal(
+            snapshot.session_id,
+            proposal.id,
+            amended,
+            "Operator amended the draft before approving",
+          )) as {ignored?: string[]};
+          const ignored = result?.ignored || [];
+          if (ignored.length) {
+            pushToast(`This step does not accept: ${ignored.join(", ")}`, "warn");
+          }
+          accepted = true;
+          setScanSteps((steps) =>
+            steps.map((s) => (s.key === proposal.id ? {...s, state: "done"} : s)),
+          );
+        } catch (reason) {
+          setScanSteps((steps) =>
+            steps.map((s) => (s.key === proposal.id ? {...s, state: "failed"} : s)),
+          );
+          // Refresh before re-raising. A refused edit still writes to the log —
+          // `human.edited_proposal` followed by `system.target_refused` — and
+          // without this the entries sit on the server unseen, so the refusal
+          // shows up as a toast that vanishes instead of as a permanent line in
+          // the append-only trail. The trail is the deliverable; it has to
+          // update on the paths that get blocked, not only on the ones that work.
+          try {
+            setSnapshot(await mirrorApi.snapshot(snapshot.session_id));
+          } catch {
+            /* the original refusal is the more useful error to surface */
+          }
+          throw reason;
+        }
+        setSnapshot(await mirrorApi.snapshot(snapshot.session_id));
+      });
+      // Only dismiss on success. A refused edit — `assert_self` rejects any
+      // identity this session hasn't proven — must leave the form open with
+      // the operator's text intact, or the refusal reads as the app eating
+      // the input rather than declining it.
+      if (accepted) setEditing(null);
+      return;
+    }
     // Drive the HUD so the 3D assembling itself has a caption. Marked running
     // before the await and settled after, so a slow step reads as working
     // rather than as stalled.
@@ -1041,21 +1153,12 @@ export default function App() {
             </div>
           </div>
 
+          {/* Order is deliberate: the human checkpoint comes FIRST.
+              It used to sit third, below the vision panel, which put the one
+              control the whole product turns on roughly 800px down the page —
+              a reviewer had to scroll to find out that nothing runs without
+              their approval. Everything else in this rail is secondary to it. */}
           <aside className="control-rail">
-            <Suspense fallback={<div className="scene-loading">Loading vision...</div>}>
-              <VisionPanel
-                busy={Boolean(busy)}
-                onPayoff={({preferredView, focusFinding}) => {
-                  setView(preferredView);
-                  if (focusFinding) setSelected(focusFinding);
-                }}
-                onSnapshot={setSnapshot}
-                sessionId={snapshot.session_id}
-                setBusy={setBusy}
-                setError={setError}
-              />
-            </Suspense>
-
             <section className="rail-section approval-queue">
               <div className="rail-title">
                 <div>
@@ -1092,26 +1195,99 @@ export default function App() {
                       <p>{proposal.rationale}</p>
                       <small>{proposal.expected_findings}</small>
                       <div className="proposal-diff">
+                        {/* `inputs` also carries graph bookkeeping — parent_id and
+                            hop_depth — which used to render here as "Will search:
+                            1, f_seed". Internal identifiers in a consent prompt
+                            are worse than no detail: the operator is being asked
+                            to approve something and shown noise. Only fields with
+                            a human meaning are listed. */}
                         <p>
-                          Will search:{" "}
-                          {Object.values(proposal.inputs || {})
-                            .flatMap((value) =>
-                              Array.isArray(value)
-                                ? value.map(String)
-                                : value
-                                  ? [String(value)]
-                                  : [],
-                            )
-                            .slice(0, 6)
-                            .join(", ") || proposal.touches_external.join(", ") || "session identifiers"}
-                        </p>
-                        <p>This expansion takes approximately 30 seconds</p>
-                        <p>
+                          <b>Reaches</b>{" "}
                           {proposal.touches_external.length
-                            ? "Elevated risk - touches external services"
-                            : "Low risk - searches public records only"}
+                            ? proposal.touches_external.join(", ")
+                            : "nothing outside this machine"}
+                        </p>
+                        {readableInputs(proposal).length > 0 && (
+                          <p>
+                            <b>Using</b> {readableInputs(proposal).join(", ")}
+                          </p>
+                        )}
+                        <p>
+                          <b>Risk</b>{" "}
+                          {proposal.touches_external.length
+                            ? "Elevated — an outbound request leaves this machine"
+                            : "Low — reads local and public records only"}
                         </p>
                       </div>
+                      {editing?.id === proposal.id && (
+                        <form
+                          className="proposal-edit"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            void decideProposal(proposal, "edit", editing.values);
+                          }}
+                        >
+                          <p className="edit-lead">
+                            Amend the draft, then approve. This step accepts changes
+                            to the fields below and nothing else.
+                          </p>
+                          {/* Said up front rather than discovered through a 403.
+                              An identity field here is not a free-text target
+                              box: the server refuses anything this session
+                              hasn't proven control of, which is what stops the
+                              edit control from becoming a way to scan strangers. */}
+                          {(proposal.editable_inputs || []).some((f) =>
+                            IDENTITY_FIELDS.has(f),
+                          ) && (
+                            <p className="edit-guard">
+                              Must be an identity you verified in this session.
+                              Anything else is refused.
+                            </p>
+                          )}
+                          {(proposal.editable_inputs || []).map((field) => (
+                            <label className="edit-field" key={field}>
+                              <span>{FIELD_LABELS[field] || field}</span>
+                              <input
+                                autoComplete="off"
+                                onChange={(event) =>
+                                  setEditing((current) =>
+                                    current && current.id === proposal.id
+                                      ? {
+                                          ...current,
+                                          values: {
+                                            ...current.values,
+                                            [field]: event.target.value,
+                                          },
+                                        }
+                                      : current,
+                                  )
+                                }
+                                placeholder={
+                                  proposal.inputs?.[field]
+                                    ? String(proposal.inputs[field])
+                                    : "Leave blank to keep what you entered"
+                                }
+                                type="text"
+                                value={editing.values[field] || ""}
+                              />
+                            </label>
+                          ))}
+                          <div className="edit-actions">
+                            <button className="approve" disabled={Boolean(busy)} type="submit">
+                              {busy === `edit:${proposal.id}`
+                                ? "Running…"
+                                : "Approve with changes"}
+                            </button>
+                            <button
+                              disabled={Boolean(busy)}
+                              onClick={() => setEditing(null)}
+                              type="button"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </form>
+                      )}
                       <div className="proposal-actions">
                         <button
                           aria-label={`Approve proposal ${proposal.title}`}
@@ -1121,6 +1297,25 @@ export default function App() {
                         >
                           {busy === `approve:${proposal.id}` ? "Running..." : "Approve"}
                         </button>
+                        {/* Only offered when the step actually declares editable
+                            fields — a disabled Edit button on a step that can't
+                            be edited teaches the wrong thing about the flow. */}
+                        {(proposal.editable_inputs?.length || 0) > 0 && (
+                          <button
+                            aria-label={`Edit proposal ${proposal.title}`}
+                            className="edit"
+                            disabled={Boolean(busy)}
+                            onClick={() =>
+                              setEditing((current) =>
+                                current?.id === proposal.id
+                                  ? null
+                                  : {id: proposal.id, values: {}},
+                              )
+                            }
+                          >
+                            {editing?.id === proposal.id ? "Close" : "Edit"}
+                          </button>
+                        )}
                         <button
                           aria-label={`Reject proposal ${proposal.title}`}
                           disabled={Boolean(busy)}
@@ -1134,6 +1329,20 @@ export default function App() {
                 </div>
               )}
             </section>
+
+            <Suspense fallback={<div className="scene-loading">Loading vision…</div>}>
+              <VisionPanel
+                busy={Boolean(busy)}
+                onPayoff={({preferredView, focusFinding}) => {
+                  setView(preferredView);
+                  if (focusFinding) setSelected(focusFinding);
+                }}
+                onSnapshot={setSnapshot}
+                sessionId={snapshot.session_id}
+                setBusy={setBusy}
+                setError={setError}
+              />
+            </Suspense>
 
             <section className="rail-section remediation-sim">
               <div className="rail-title">

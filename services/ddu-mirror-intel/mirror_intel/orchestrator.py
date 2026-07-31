@@ -335,6 +335,8 @@ class Orchestrator:
             inputs={k: v for k, v in inputs.items() if k in {"hop_depth", "parent_id", "state", "county"}},
             expected_findings=step.expected_findings,
             touches_external=list(step.touches_external),
+            # Sorted so the edit form renders in a stable order between drafts.
+            editable_inputs=sorted(step.editable_inputs),
             parent_finding_id=inputs.get("parent_id"),
             hop_depth=int(inputs.get("hop_depth", 1)),
         )

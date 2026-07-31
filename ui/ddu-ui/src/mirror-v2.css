@@ -1468,3 +1468,450 @@ body {
   .face-scan-done span { animation: none; }
   .ring-progress { transition: none; }
 }
+
+/* ═════════════════════════════════════════════════════════════════════
+   10. WORKSPACE — the same glass language, applied past the entry flow
+   ═════════════════════════════════════════════════════════════════════
+   The landing, face check and scope picker were rebuilt in this language;
+   the workspace behind them was still on the older flat-panel styling, so
+   crossing into the app felt like crossing into a different product. These
+   rules bring it across without touching the layout logic in styles.css.
+   ───────────────────────────────────────────────────────────────────── */
+
+.workspace {
+  border-color: var(--v2-hairline);
+  border-radius: var(--v2-radius);
+  background: linear-gradient(180deg, rgba(14, 19, 27, 0.82), rgba(8, 11, 16, 0.92));
+  box-shadow: var(--v2-shadow);
+}
+
+.canvas-column { border-right-color: var(--v2-hairline); }
+
+.workspace-toolbar {
+  border-bottom-color: var(--v2-hairline);
+  background: rgba(12, 17, 24, 0.7);
+  backdrop-filter: blur(var(--v2-blur));
+}
+
+/* ── control rail ─────────────────────────────────────────────────────
+   Three children, and the grid only ever declared two rows — the third
+   fell into an implicit row and pushed the approval queue ~800px down.
+   Rows are now explicit and the rail scrolls inside itself, so the human
+   checkpoint stays at the top where a reviewer lands on it immediately. */
+.control-rail {
+  grid-template-rows: auto auto auto;
+  align-content: start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: rgba(10, 14, 20, 0.72);
+  backdrop-filter: blur(var(--v2-blur));
+}
+
+.control-rail::-webkit-scrollbar { width: 9px; }
+.control-rail::-webkit-scrollbar-thumb {
+  background: var(--v2-hairline-hi);
+  border-radius: 99px;
+}
+
+.rail-section + .rail-section { border-top-color: var(--v2-hairline); }
+
+.rail-title h2 {
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  color: var(--v2-text);
+}
+
+.rail-title .eyebrow {
+  color: var(--v2-accent);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* The approval queue is the product's whole argument — give it a tint the
+   other rail sections don't have, so the eye lands there first. */
+.rail-section.approval-queue {
+  background: linear-gradient(180deg, rgba(79, 214, 255, 0.055), transparent 70%);
+  border-left: 2px solid var(--v2-accent-dim);
+}
+
+.rail-title > span {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  display: grid;
+  place-items: center;
+  border-radius: 99px;
+  background: var(--v2-accent);
+  color: #04222c;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── proposal cards ─────────────────────────────────────────────────── */
+
+.proposal-card {
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-glass);
+  transition: border-color 0.2s var(--v2-ease), transform 0.2s var(--v2-ease);
+}
+
+.proposal-card:hover {
+  border-color: var(--v2-hairline-hi);
+  transform: translateY(-1px);
+}
+
+.proposal-card h3 {
+  font-size: 14.5px;
+  letter-spacing: -0.005em;
+  color: var(--v2-text);
+}
+
+/* Deliberately NOT clamped.
+   This paragraph is the agent's reason for wanting the step, and the operator
+   is being asked to consent to it. It was truncating mid-sentence ("Username
+   matches are not"), which asks someone to approve reasoning they were not
+   allowed to finish reading. The rail scrolls; the text stays whole. */
+.proposal-card > p {
+  /* styles.css caps this at `max-height: 54px; overflow: hidden` — a hard
+     crop rather than a clamp, which is why it cut mid-word with no ellipsis
+     to hint there was more. Both have to be undone, not just the overflow. */
+  max-height: none;
+  overflow: visible;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--v2-text-dim);
+}
+
+.proposal-diff {
+  border-left: 2px solid var(--v2-accent-dim);
+  background: rgba(79, 214, 255, 0.05);
+  border-radius: 0 var(--v2-radius-sm) var(--v2-radius-sm) 0;
+  padding: 9px 11px;
+  display: grid;
+  gap: 4px;
+}
+
+.proposal-diff p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--v2-text-dim);
+}
+
+.proposal-diff b {
+  display: inline-block;
+  min-width: 52px;
+  color: var(--v2-text-faint);
+  font-weight: 600;
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+/* ── approve / edit / reject ──────────────────────────────────────────
+   Three weights for three meanings: approve is the filled affirmative,
+   edit is outlined in the same accent because it also proceeds (with
+   amendments), reject is quiet. Giving edit the accent matters — it is
+   half of what this track is scored on and it should not read as a
+   tertiary action next to Approve. */
+.proposal-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+
+.proposal-actions button {
+  flex: 1 1 auto;
+  padding: 9px 12px;
+  border-radius: var(--v2-radius-sm);
+  border: 1px solid var(--v2-hairline);
+  background: transparent;
+  color: var(--v2-text-dim);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s var(--v2-ease);
+}
+
+.proposal-actions button:hover:not(:disabled) {
+  border-color: var(--v2-hairline-hi);
+  color: var(--v2-text);
+  background: var(--v2-glass-hi);
+}
+
+.proposal-actions button.approve {
+  background: var(--v2-accent);
+  border-color: var(--v2-accent);
+  color: #04222c;
+}
+
+.proposal-actions button.approve:hover:not(:disabled) {
+  background: #7ce7ff;
+  border-color: #7ce7ff;
+  color: #04222c;
+}
+
+.proposal-actions button.edit {
+  border-color: var(--v2-accent-dim);
+  color: var(--v2-accent);
+}
+
+.proposal-actions button.edit:hover:not(:disabled) {
+  background: rgba(79, 214, 255, 0.12);
+  border-color: var(--v2-accent);
+  color: var(--v2-accent);
+}
+
+.proposal-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── inline edit form ─────────────────────────────────────────────────
+   Renders only the fields the step declared editable. The placeholder on
+   an empty box says "leave blank to keep what you entered", because the
+   identity values are deliberately kept out of the proposal payload and
+   there is nothing to prefill — see the redaction note in orchestrator
+   `_draft`. Saying so beats showing an empty box with no explanation. */
+.proposal-edit {
+  margin-top: 10px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--v2-accent-dim);
+  border-radius: var(--v2-radius-sm);
+  background: rgba(79, 214, 255, 0.06);
+  animation: v2-fade 0.24s var(--v2-ease) both;
+}
+
+.edit-lead {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--v2-text-dim);
+}
+
+.edit-guard {
+  margin: 0;
+  padding: 7px 9px;
+  border-radius: var(--v2-radius-sm);
+  border: 1px solid rgba(236, 154, 60, 0.35);
+  background: rgba(236, 154, 60, 0.09);
+  color: #f0b775;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.edit-field { display: grid; gap: 5px; }
+
+.edit-field span {
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--v2-accent);
+  font-weight: 600;
+}
+
+.edit-field input {
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: var(--v2-radius-sm);
+  border: 1px solid var(--v2-hairline);
+  background: rgba(6, 9, 14, 0.75);
+  color: var(--v2-text);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.edit-field input::placeholder { color: var(--v2-text-faint); }
+
+.edit-field input:focus {
+  outline: none;
+  border-color: var(--v2-accent);
+  box-shadow: 0 0 0 3px var(--v2-accent-glow);
+}
+
+/* The submit label is long ("Approve with changes") and was wrapping to two
+   lines against an equal-width Cancel. Weighted 2:1 so it stays on one. */
+.edit-actions { display: flex; gap: 7px; }
+
+.edit-actions button:first-child { flex: 2; }
+.edit-actions button:last-child { flex: 1; }
+
+.edit-actions button {
+  white-space: nowrap;
+  padding: 9px 12px;
+  border-radius: var(--v2-radius-sm);
+  border: 1px solid var(--v2-hairline);
+  background: transparent;
+  color: var(--v2-text-dim);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s var(--v2-ease);
+}
+
+.edit-actions button.approve {
+  background: var(--v2-accent);
+  border-color: var(--v2-accent);
+  color: #04222c;
+}
+
+.edit-actions button:hover:not(:disabled) { filter: brightness(1.12); }
+.edit-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── activity / action log ────────────────────────────────────────────
+   The audit trail is a scored deliverable, so it should look deliberate
+   rather than like debug output. */
+.activity-stream ol li {
+  border-bottom: 1px solid var(--v2-hairline);
+  font-size: 12px;
+  color: var(--v2-text-dim);
+}
+
+.activity-stream ol li time {
+  color: var(--v2-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-stream .section-heading .eyebrow { color: var(--v2-accent); }
+
+/* "APPEND ONLY" is a claim about the log's integrity, so it should read as a
+   property of the system rather than as decoration. */
+.activity-stream .section-heading > span {
+  padding: 4px 9px;
+  border-radius: 99px;
+  border: 1px solid var(--v2-accent-dim);
+  background: rgba(79, 214, 255, 0.08);
+  color: var(--v2-accent);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  font-weight: 600;
+}
+
+.activity-search input {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--v2-radius-sm);
+  border: 1px solid var(--v2-hairline);
+  background: rgba(6, 9, 14, 0.7);
+  color: var(--v2-text);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+.activity-search input:focus {
+  outline: none;
+  border-color: var(--v2-accent);
+  box-shadow: 0 0 0 3px var(--v2-accent-glow);
+}
+
+.rail-empty {
+  border: 1px dashed var(--v2-hairline);
+  border-radius: var(--v2-radius-sm);
+  background: rgba(255, 255, 255, 0.014);
+  color: var(--v2-text-dim);
+}
+
+.rail-empty button {
+  border-color: var(--v2-accent-dim);
+  color: var(--v2-accent);
+  border-radius: var(--v2-radius-sm);
+}
+
+/* ── activity filters ─────────────────────────────────────────────────
+   styles.css set only font-size and padding on these, so they fell back
+   to the UA default button chrome: white fill inheriting the app's near-
+   white label — four blank boxes next to the audit log. Same failure the
+   header buttons had. An explicit pair, always. */
+.activity-filters button {
+  padding: 5px 11px;
+  border-radius: 99px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-glass);
+  color: var(--v2-text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: all 0.16s var(--v2-ease);
+}
+
+.activity-filters button:hover {
+  border-color: var(--v2-hairline-hi);
+  color: var(--v2-text);
+}
+
+.activity-filters button.active,
+.activity-filters .active {
+  border-color: var(--v2-accent);
+  background: rgba(79, 214, 255, 0.14);
+  color: var(--v2-accent);
+}
+
+/* ── attack-path narratives ───────────────────────────────────────────
+   `white-space: nowrap` with an ellipsis cut every chain to one line
+   ("…then us…"). The chain IS the finding — a path that stops at the
+   first clause tells the reader nothing about how the hops connect.
+   Three lines, wrapping. */
+.attack-paths article strong {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  text-overflow: initial;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--v2-text);
+}
+
+.attack-paths article > span {
+  color: var(--v2-accent);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.attack-paths article small { color: var(--v2-text-faint); }
+
+/* ── remaining low-contrast controls ──────────────────────────────────
+   Two buttons were dark-on-dark enough to read as disabled. */
+.vision-panel .face-stepup,
+.remediation-sim button,
+.simulate-button {
+  border: 1px solid var(--v2-accent-dim);
+  border-radius: var(--v2-radius-sm);
+  background: rgba(79, 214, 255, 0.09);
+  color: var(--v2-accent);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s var(--v2-ease);
+}
+
+.vision-panel .face-stepup:hover:not(:disabled),
+.remediation-sim button:hover:not(:disabled),
+.simulate-button:hover:not(:disabled) {
+  background: rgba(79, 214, 255, 0.17);
+  border-color: var(--v2-accent);
+}
+
+.vision-panel .face-stepup:disabled,
+.remediation-sim button:disabled,
+.simulate-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Dev-only backend-URL notice. Useful when wiring things up, but it was the
+   single loudest element on the page above the product's own header. Kept
+   (it still warns) and demoted to a quiet strip. */
+.config-banner,
+.config-warning,
+.dev-banner {
+  font-size: 10.5px;
+  padding: 3px 12px;
+  background: rgba(10, 14, 20, 0.9);
+  color: var(--v2-text-faint);
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.config-banner strong,
+.config-warning strong,
+.dev-banner strong { color: var(--v2-text-dim); font-weight: 600; }

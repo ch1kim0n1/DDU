@@ -82,6 +82,8 @@ export interface Proposal {
   inputs: Record<string, unknown>;
   expected_findings: string;
   touches_external: string[];
+  /** Fields this step accepts on an edit. The edit form renders exactly these. */
+  editable_inputs?: string[];
   parent_finding_id?: string | null;
   hop_depth: number;
   status:

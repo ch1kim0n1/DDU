@@ -285,6 +285,11 @@ class Proposal(BaseModel):
     #: What the human is being asked to accept: cost, reach, and reversibility.
     expected_findings: str = ""
     touches_external: list[str] = Field(default_factory=list)
+    #: Fields this step will accept on an edit. The UI renders exactly these
+    #: and nothing else, so the allowlist has one definition (the step) rather
+    #: than a second copy in the client that can drift out of step with it.
+    #: Additive with a default, so a client built against 1.0.0 ignores it.
+    editable_inputs: list[str] = Field(default_factory=list)
     parent_finding_id: str | None = None
     hop_depth: int = 0
 

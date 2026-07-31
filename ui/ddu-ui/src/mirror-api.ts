@@ -37,10 +37,20 @@ async function parseError(response: Response): Promise<Error> {
   let detail = response.statusText;
   try {
     const body = (await response.json()) as {detail?: unknown};
-    detail =
-      typeof body.detail === "string"
-        ? body.detail
-        : JSON.stringify(body.detail || body);
+    if (typeof body.detail === "string") {
+      detail = body.detail;
+    } else if (body.detail && typeof body.detail === "object") {
+      // The guardrails return structured refusals — `assert_self` sends
+      // {error, reason, requested, explanation}. Stringifying that whole
+      // object put raw JSON in front of the user, which reads as a crash
+      // rather than as the deliberate refusal it is. Prefer the sentence
+      // the server wrote for a human; fall back only if there isn't one.
+      const structured = body.detail as Record<string, unknown>;
+      const readable = structured.explanation || structured.reason || structured.error;
+      detail = typeof readable === "string" ? readable : JSON.stringify(structured);
+    } else {
+      detail = JSON.stringify(body);
+    }
   } catch {
     detail = await response.text();
   }
@@ -162,6 +172,30 @@ export const mirrorApi = {
     request("/intel/scan/approve", {
       method: "POST",
       body: JSON.stringify({session_id: sessionId, proposal_id: proposalId}),
+    }),
+
+  /**
+   * Approve with amendments — the third arm of Track 3's approve/edit/reject.
+   *
+   * The server applies only the fields the step declares editable and returns
+   * anything else under `ignored` rather than silently discarding it. Callers
+   * should surface `ignored`: a change the human made and the system dropped
+   * without saying so is precisely the failure this flow exists to prevent.
+   */
+  editProposal: (
+    sessionId: string,
+    proposalId: string,
+    changes: Record<string, string>,
+    reason?: string,
+  ) =>
+    request("/intel/scan/edit", {
+      method: "POST",
+      body: JSON.stringify({
+        session_id: sessionId,
+        proposal_id: proposalId,
+        changes,
+        reason,
+      }),
     }),
 
   // `reason` is surfaced in the action log, so let callers say *why* rather

@@ -21,7 +21,7 @@ from mirror_intel.guardrails import (
 )
 from mirror_intel.llm import LLM, OfflineProvider, Tier
 from mirror_intel.mock import demo_identity, generate
-from mirror_intel.orchestrator import Orchestrator
+from mirror_intel.orchestrator import STEPS, Orchestrator
 from mirror_intel.quarantine import classify_injection, parse_untrusted
 from mirror_intel.redaction import (
     RedactionViolation,
@@ -473,6 +473,41 @@ def test_editing_toward_an_unverified_target_still_gets_refused(session):
     orch.edit_and_approve(proposal.id, {"email": "victim@example.com"})
     with pytest.raises(TargetRefusedError):
         orch.execute(proposal.id)
+
+
+def test_proposals_publish_their_editable_fields(session):
+    """The UI renders the edit form from this list.
+
+    Without it the client would need its own copy of the allowlist, which is a
+    second source of truth that drifts: a step gains an editable field, the
+    server accepts it, and the form never offers it. Track 3 requires an edit
+    control, so what the control is allowed to change has to travel with the
+    proposal.
+    """
+    orch = Orchestrator(session=session)
+    proposals = {p.step: p for p in orch.plan()}
+
+    assert proposals["discovery.breaches"].editable_inputs == ["email"]
+    assert proposals["discovery.accounts"].editable_inputs == ["handle"]
+
+    # Every advertised field must actually be accepted, or the form offers a
+    # box whose contents the server silently drops. Sorted too, so the form's
+    # field order doesn't shuffle between drafts.
+    for proposal in proposals.values():
+        step = STEPS[proposal.step]
+        assert proposal.editable_inputs == sorted(step.editable_inputs)
+
+    # The multi-field step is the one that proves ordering is stable; it is not
+    # always planned (it depends on jurisdiction), so check it at the source.
+    assert sorted(STEPS["advisor.records"].editable_inputs) == ["county", "state"]
+
+
+def test_a_step_with_nothing_editable_advertises_nothing(session):
+    """The UI hides Edit entirely when this is empty, rather than showing a
+    control that refuses everything typed into it."""
+    orch = Orchestrator(session=session)
+    linkability = next(p for p in orch.plan() if "link" in p.step)
+    assert linkability.editable_inputs == []
 
 
 def test_kill_switch_halts_approved_work(session):
