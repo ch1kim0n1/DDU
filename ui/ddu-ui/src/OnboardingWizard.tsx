@@ -301,14 +301,21 @@ export function OnboardingWizard({onComplete, onCancel, busy, error}: Onboarding
         <div className="wizard-body">
           {step === 0 && (
             <fieldset className="wizard-step">
-              <legend>Step 1 - Your verified identity</legend>
+              <legend className="wizard-legend">
+                <span className="wizard-eyebrow">Step 1 of {totalSteps}</span>
+                <span className="wizard-headline">Which accounts are yours?</span>
+              </legend>
               <p className="wizard-intro" id="wizard-email-help">
-                Enter identifiers you control. DDU Mirror only scans what you
-                can prove is yours. Nothing else.
+                Mirror only scans what you can prove you control. There is no
+                field here for anyone else&apos;s name.
               </p>
 
-              <label className="wizard-field">
-                <span>Email address</span>
+              {/* Email is the one required identifier, so it gets the screen to
+                  itself. The optional ones stay hidden until it is banked —
+                  three identical label/input/Add rows stacked at once read as
+                  three unfinished tasks and buried the one that mattered. */}
+              <label className="wizard-field wizard-field--hero">
+                <span>Your email address</span>
                 <div className="wizard-input-row">
                   <input
                     type="email"
@@ -317,6 +324,7 @@ export function OnboardingWizard({onComplete, onCancel, busy, error}: Onboarding
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addEmail(); } }}
                     placeholder="you@example.com"
                     aria-describedby="wizard-email-help"
+                    autoFocus
                   />
                   <button type="button" onClick={addEmail} disabled={!email.trim()}>
                     Add
@@ -328,57 +336,70 @@ export function OnboardingWizard({onComplete, onCancel, busy, error}: Onboarding
                   {emails.map((value) => (
                     <span className="wizard-chip" key={value}>
                       {value}
-                      <button type="button" onClick={() => removeEmail(value)}>x</button>
+                      <button type="button" onClick={() => removeEmail(value)} aria-label={`Remove ${value}`}>×</button>
                     </span>
                   ))}
                 </div>
               )}
 
-              <label className="wizard-field">
-                <span>Username / handle (optional)</span>
-                <div className="wizard-input-row">
-                  <input
-                    type="text"
-                    value={handle}
-                    onChange={(e) => setHandle(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addHandle(); } }}
-                    placeholder="@yourhandle"
-                  />
-                  <button type="button" onClick={addHandle} disabled={!handle.trim()}>Add</button>
-                </div>
-              </label>
-              {handles.length > 0 && (
-                <div className="wizard-chips">
-                  {handles.map((value) => (
-                    <span className="wizard-chip" key={value}>
-                      @{value}
-                      <button type="button" onClick={() => removeHandle(value)}>x</button>
-                    </span>
-                  ))}
-                </div>
-              )}
+              {emails.length === 0 ? (
+                <p className="wizard-hint">
+                  Press Enter or Add to confirm it. You can add more than one.
+                </p>
+              ) : (
+                <div className="wizard-optional">
+                  <p className="wizard-optional-title">
+                    Anything else they could find you by?
+                    <em>Optional</em>
+                  </p>
 
-              <label className="wizard-field">
-                <span>Profile URL (optional)</span>
-                <div className="wizard-input-row">
-                  <input
-                    type="url"
-                    value={accountUrl}
-                    onChange={(e) => setAccountUrl(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addUrl(); } }}
-                    placeholder="https://linkedin.com/in/you"
-                  />
-                  <button type="button" onClick={addUrl} disabled={!accountUrl.trim()}>Add</button>
-                </div>
-              </label>
-              {accountUrls.length > 0 && (
-                <div className="wizard-chips">
-                  {accountUrls.map((value) => (
-                    <span className="wizard-chip url" key={value}>
-                      {value.replace(/^https?:\/\//, "").slice(0, 40)}
-                      <button type="button" onClick={() => removeUrl(value)}>x</button>
-                    </span>
-                  ))}
+                  <label className="wizard-field">
+                    <span>Username or handle</span>
+                    <div className="wizard-input-row">
+                      <input
+                        type="text"
+                        value={handle}
+                        onChange={(e) => setHandle(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addHandle(); } }}
+                        placeholder="@yourhandle"
+                      />
+                      <button type="button" onClick={addHandle} disabled={!handle.trim()}>Add</button>
+                    </div>
+                  </label>
+                  {handles.length > 0 && (
+                    <div className="wizard-chips">
+                      {handles.map((value) => (
+                        <span className="wizard-chip" key={value}>
+                          @{value}
+                          <button type="button" onClick={() => removeHandle(value)} aria-label={`Remove ${value}`}>×</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <label className="wizard-field">
+                    <span>Profile URL</span>
+                    <div className="wizard-input-row">
+                      <input
+                        type="url"
+                        value={accountUrl}
+                        onChange={(e) => setAccountUrl(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addUrl(); } }}
+                        placeholder="https://linkedin.com/in/you"
+                      />
+                      <button type="button" onClick={addUrl} disabled={!accountUrl.trim()}>Add</button>
+                    </div>
+                  </label>
+                  {accountUrls.length > 0 && (
+                    <div className="wizard-chips">
+                      {accountUrls.map((value) => (
+                        <span className="wizard-chip url" key={value}>
+                          {value.replace(/^https?:\/\//, "").slice(0, 40)}
+                          <button type="button" onClick={() => removeUrl(value)} aria-label={`Remove ${value}`}>×</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </fieldset>
@@ -386,10 +407,13 @@ export function OnboardingWizard({onComplete, onCancel, busy, error}: Onboarding
 
           {step === 1 && (
             <fieldset className="wizard-step">
-              <legend>Step 2 - Threat model</legend>
+              <legend className="wizard-legend">
+                <span className="wizard-eyebrow">Step 2 of {totalSteps}</span>
+                <span className="wizard-headline">Who are you worried about?</span>
+              </legend>
               <p className="wizard-intro">
-                Who are you trying to stay safe from? This shapes how findings
-                are weighted and which attack paths are prioritized.
+                This changes how findings are weighted and which chains get
+                surfaced first. You can change it later.
               </p>
               <div className="wizard-personas" role="radiogroup" aria-label="Threat model persona">
                 {PERSONAS.map((p) => (
@@ -414,11 +438,14 @@ export function OnboardingWizard({onComplete, onCancel, busy, error}: Onboarding
 
           {step === 2 && (
             <fieldset className="wizard-step">
-              <legend>Step 3 - Context</legend>
+              <legend className="wizard-legend">
+                <span className="wizard-eyebrow">Step 3 of {totalSteps}</span>
+                <span className="wizard-headline">Where do you live?</span>
+              </legend>
               <p className="wizard-intro">
-                Jurisdiction helps the records advisor tell you what is public
-                where you live. The guess is optional and never leaves your
-                session.
+                Records law is state by state, so this decides what the advisor
+                can tell you is public. Nothing is looked up and no record is
+                retrieved.
               </p>
               <div className="wizard-row">
                 <label className="wizard-field">
@@ -451,9 +478,12 @@ export function OnboardingWizard({onComplete, onCancel, busy, error}: Onboarding
 
           {step === 3 && (
             <fieldset className="wizard-step">
-              <legend>Step 4 - Consent</legend>
+              <legend className="wizard-legend">
+                <span className="wizard-eyebrow">Step 4 of {totalSteps}</span>
+                <span className="wizard-headline">Before we start</span>
+              </legend>
               <p className="wizard-intro">
-                Review what happens next before you start.
+                Three things that stay true for the whole session.
               </p>
               <div className="wizard-consent">
                 <div className="wizard-consent-item">

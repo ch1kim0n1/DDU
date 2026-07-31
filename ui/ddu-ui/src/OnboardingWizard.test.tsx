@@ -53,6 +53,8 @@ describe("OnboardingWizard", () => {
     fireEvent.click(screen.getByRole("button", {name: "Continue"}));
     fireEvent.click(screen.getByLabelText(/Personal safety/i));
     fireEvent.click(screen.getByRole("button", {name: "Back"}));
-    expect(screen.getByText("Step 1 - Your verified identity")).toBeInTheDocument();
+    // The step-1 headline. "Step 1 of 4" appears twice — once visibly and once
+    // in the sr-only live region — so matching on the marker is ambiguous.
+    expect(screen.getByText("Which accounts are yours?")).toBeInTheDocument();
   });
 });

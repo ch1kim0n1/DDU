@@ -2348,3 +2348,146 @@ body {
   min-height: 0;
   height: 100%;
 }
+
+/* ── wizard: one idea per screen ──────────────────────────────────────
+   Matches the scope screen's shape — small step marker, one large question,
+   one line of explanation — so the four wizard steps and the scope picker
+   read as the same sequence rather than two different products. */
+.wizard-legend {
+  display: block;
+  width: 100%;
+  padding: 0;
+  margin-bottom: 10px;
+}
+
+.wizard-eyebrow {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.19em;
+  text-transform: uppercase;
+  color: var(--v2-text-faint);
+}
+
+.wizard-headline {
+  display: block;
+  font-size: 27px;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  color: var(--v2-text);
+}
+
+/* The old `legend` rule sized every step title; the headline span owns it now. */
+.wizard-step legend,
+.wizard-body > fieldset > legend {
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: normal;
+  margin-bottom: 10px;
+}
+
+.wizard-intro {
+  margin: 0 0 22px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--v2-text-dim);
+  max-width: 54ch;
+}
+
+/* The required field gets more air and a larger control than the optional
+   ones below it, so the hierarchy is visible before anything is read. */
+.wizard-field--hero .wizard-input-row input { padding: 14px 15px; font-size: 15px; }
+.wizard-field--hero > span { font-size: 13px; color: var(--v2-text); }
+
+.wizard-hint {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--v2-text-faint);
+}
+
+/* Revealed only once an email is banked. */
+.wizard-optional {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--v2-hairline);
+  display: grid;
+  gap: 14px;
+  animation: v2-fade 0.3s var(--v2-ease) both;
+}
+
+.wizard-optional-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--v2-text);
+}
+
+.wizard-optional-title em {
+  font-style: normal;
+  padding: 2px 8px;
+  border-radius: 99px;
+  border: 1px solid var(--v2-hairline);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--v2-text-faint);
+}
+
+.wizard-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+
+/* Give the card a steady height so revealing the optional block does not
+   make the dialog jump under the pointer. */
+.wizard-body { min-height: 340px; }
+
+/* Consent links were inheriting a dark Blueprint blue and sat at roughly
+   1.6:1 against the panel — effectively invisible, on the one screen where
+   the user is agreeing to terms they are meant to be able to read first. */
+.wizard-adult a,
+.wizard-consent a,
+.wizard-body a {
+  color: var(--v2-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+.wizard-adult a:hover,
+.wizard-consent a:hover,
+.wizard-body a:hover { color: #7ce7ff; }
+
+.wizard-adult {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--v2-text-dim);
+  cursor: pointer;
+}
+
+.wizard-adult input[type="checkbox"] {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  cursor: pointer;
+}
+
+.wizard-adult:hover { border-color: var(--v2-hairline-hi); }
+
+.wizard-consent-item {
+  padding: 12px 14px;
+  display: grid;
+  gap: 3px;
+}
+
+.wizard-consent-item strong { color: var(--v2-text); font-size: 13.5px; font-weight: 600; }
+.wizard-consent-item span { font-size: 12.5px; line-height: 1.5; color: var(--v2-text-dim); }
+.wizard-consent { display: grid; gap: 10px; }
