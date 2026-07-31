@@ -2491,3 +2491,217 @@ body {
 .wizard-consent-item strong { color: var(--v2-text); font-size: 13.5px; font-weight: 600; }
 .wizard-consent-item span { font-size: 12.5px; line-height: 1.5; color: var(--v2-text-dim); }
 .wizard-consent { display: grid; gap: 10px; }
+
+/* ═════════════════════════════════════════════════════════════════════
+   12. RISK HEADLINE
+   ═════════════════════════════════════════════════════════════════════ */
+
+.risk-headline {
+  align-items: center;
+  gap: 26px;
+  padding: 22px 26px;
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-radius);
+  background: linear-gradient(120deg, rgba(16, 22, 31, 0.9), rgba(9, 12, 18, 0.94));
+  box-shadow: var(--v2-shadow);
+}
+
+.risk-copy .eyebrow {
+  color: var(--v2-text-faint);
+  font-size: 10.5px;
+  letter-spacing: 0.19em;
+  text-transform: uppercase;
+}
+
+.risk-copy h1 {
+  margin: 5px 0 7px;
+  font-size: clamp(23px, 2.4vw, 33px);
+  font-weight: 650;
+  line-height: 1.12;
+  letter-spacing: -0.028em;
+  color: var(--v2-text);
+}
+
+.risk-copy > p:last-child {
+  margin: 0;
+  font-size: 13px;
+  color: var(--v2-text-dim);
+}
+
+.score-value { color: var(--v2-text); font-variant-numeric: tabular-nums; }
+
+/* ── projection panel ─────────────────────────────────────────────── */
+
+.risk-projection {
+  min-width: 210px;
+  padding: 14px 16px;
+  border-radius: var(--v2-radius-sm);
+  border: 1px solid var(--v2-hairline);
+  background: rgba(255, 255, 255, 0.022);
+}
+
+.risk-projection .eyebrow {
+  margin: 0 0 10px;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--v2-text-faint);
+}
+
+/* Stacked proportion bar — the split between what is permanent and what the
+   operator can still act on. Two colours only, matching the 3D scene's
+   encoding so amber means the same thing in both places. */
+.split-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.split-bar i { display: block; height: 100%; }
+.split-bar .is-permanent { background: linear-gradient(90deg, #ff7a59, var(--bp-orange4, #ec9a3c)); }
+.split-bar .is-fixable { background: linear-gradient(90deg, var(--v2-accent-dim), var(--v2-accent)); }
+
+.projection-note {
+  margin: 9px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--v2-text-dim);
+}
+
+.projection-note b { color: var(--v2-text); font-weight: 650; }
+
+.projection-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.projection-row span { display: flex; flex-direction: column; gap: 1px; }
+
+.projection-row em {
+  font-style: normal;
+  font-size: 27px;
+  font-weight: 680;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--v2-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.projection-row small {
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--v2-text-faint);
+}
+
+.projection-row .is-target em { color: var(--v2-accent); }
+.projection-row > i { font-style: normal; color: var(--v2-text-faint); font-size: 15px; }
+
+@media (max-width: 1120px) {
+  .risk-projection { min-width: 0; }
+}
+
+/* ── top bar ──────────────────────────────────────────────────────────
+   Last surface still on the old chrome. Buttons here had three different
+   weights for four actions of equal rank, and "End & wipe" — the only
+   destructive one — looked identical to "Print report". */
+.mirror-header {
+  border-bottom: 1px solid var(--v2-hairline);
+  background: rgba(8, 11, 16, 0.86);
+  backdrop-filter: blur(var(--v2-blur));
+}
+
+.mirror-brand > span {
+  background: linear-gradient(140deg, #7ce7ff, var(--v2-accent));
+  color: #04222c;
+  font-weight: 800;
+  border-radius: 9px;
+}
+
+.mirror-brand strong { color: var(--v2-text); letter-spacing: 0.03em; }
+.mirror-brand small,
+.mirror-brand p { color: var(--v2-text-faint); }
+
+.mirror-header button {
+  border-radius: var(--v2-radius-sm);
+  border: 1px solid var(--v2-hairline);
+  background: transparent;
+  color: var(--v2-text-dim);
+  font-size: 12.5px;
+  font-weight: 550;
+  transition: all 0.16s var(--v2-ease);
+}
+
+.mirror-header button:hover:not(:disabled) {
+  border-color: var(--v2-hairline-hi);
+  color: var(--v2-text);
+  background: var(--v2-glass-hi);
+}
+
+/* The one irreversible control on the page should not look like Print. */
+.mirror-header .wipe-button,
+.mirror-header button[class*="wipe"],
+.mirror-header button[class*="danger"] {
+  border-color: rgba(205, 66, 70, 0.45);
+  color: #fa999c;
+}
+
+.mirror-header .wipe-button:hover:not(:disabled),
+.mirror-header button[class*="wipe"]:hover:not(:disabled),
+.mirror-header button[class*="danger"]:hover:not(:disabled) {
+  border-color: #cd4246;
+  background: rgba(205, 66, 70, 0.14);
+  color: #ffc7c9;
+}
+
+/* Mock / Real is a truthfulness switch, not a preference — the active side
+   stays legible rather than being a faint tint. */
+.data-mode-toggle button[aria-pressed="true"],
+.data-mode-toggle .active,
+.mode-switch .active {
+  background: var(--v2-accent);
+  border-color: var(--v2-accent);
+  color: #04222c;
+  font-weight: 650;
+}
+
+/* Ask Mirror is the one accent action inside the workspace toolbar. */
+.workspace-toolbar .ask-mirror,
+.workspace-toolbar button[class*="ask"] {
+  border-color: var(--v2-accent-dim);
+  color: var(--v2-accent);
+}
+
+.workspace-toolbar .ask-mirror:hover,
+.workspace-toolbar button[class*="ask"]:hover {
+  background: rgba(79, 214, 255, 0.12);
+  border-color: var(--v2-accent);
+}
+
+.view-switch { border-color: var(--v2-hairline); border-radius: var(--v2-radius-sm); overflow: hidden; }
+
+.view-switch button[aria-selected="true"],
+.view-switch .active {
+  background: var(--v2-accent);
+  color: #04222c;
+  font-weight: 650;
+}
+
+.workspace-toolbar select {
+  padding: 6px 10px;
+  border-radius: var(--v2-radius-sm);
+  border: 1px solid var(--v2-hairline);
+  background: rgba(6, 9, 14, 0.7);
+  color: var(--v2-text);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+.workspace-toolbar select:focus {
+  outline: none;
+  border-color: var(--v2-accent);
+  box-shadow: 0 0 0 3px var(--v2-accent-glow);
+}

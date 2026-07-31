@@ -1072,12 +1072,60 @@ export default function App() {
               irreversible
             </p>
           </div>
-          <div className="before-after">
-            <span>NOW</span>
-            <strong>{score.score}</strong>
-            <i>-&gt;</i>
-            <span>AFTER FIXES</span>
-            <strong>{simulation?.score_projected.score ?? "-"}</strong>
+          {/* This panel used to read "NOW <score> -> AFTER FIXES -" until a
+              simulation had been run: it repeated the number already in the
+              ring, and then showed a bare dash, so the first thing anyone saw
+              was a readout that looked broken. Before a simulation exists it
+              now shows what the score is *made of* — which is both always
+              available and the product's actual argument. */}
+          <div className="risk-projection">
+            {simulation ? (
+              <>
+                <p className="eyebrow">If you apply the fixes</p>
+                <div className="projection-row">
+                  <span>
+                    <em>{simulation.score_now.score}</em>
+                    <small>now</small>
+                  </span>
+                  <i aria-hidden="true">→</i>
+                  <span className="is-target">
+                    <em>{simulation.score_projected.score}</em>
+                    <small>after</small>
+                  </span>
+                </div>
+                <p className="projection-note">
+                  {(() => {
+                    const drop = simulation.score_now.score - simulation.score_projected.score;
+                    if (drop > 0) return `${drop} points you can take back`;
+                    if (drop === 0) return "Nothing here moves the score";
+                    return `${Math.abs(drop)} points worse`;
+                  })()}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="eyebrow">What the score is made of</p>
+                <div
+                  className="split-bar"
+                  role="img"
+                  aria-label={`${Math.round(score.irreversible_share * 100)} percent permanent, ${100 - Math.round(score.irreversible_share * 100)} percent still fixable`}
+                >
+                  <i
+                    className="is-permanent"
+                    style={{width: `${Math.round(score.irreversible_share * 100)}%`}}
+                  />
+                  <i
+                    className="is-fixable"
+                    style={{width: `${100 - Math.round(score.irreversible_share * 100)}%`}}
+                  />
+                </div>
+                <p className="projection-note">
+                  <b>{Math.round(score.irreversible_share * 100)}%</b> permanent ·{" "}
+                  <b>{100 - Math.round(score.irreversible_share * 100)}%</b> still
+                  yours to undo
+                </p>
+              </>
+            )}
           </div>
         </section>
 
