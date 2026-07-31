@@ -17,6 +17,7 @@ from .builders import build_face_link_finding
 from .cache import content_hash, demo_image_path, list_demo_assets, reload_cache
 from .corpus import CorpusViolation, corpus_for, drop_corpus
 from .face import redaction_preview
+from .id_verify import ALLOWED_KINDS, id_verify_store, verify_document
 from .liveness import liveness_store
 from .pipeline import analyze_upload
 
@@ -293,14 +294,24 @@ async def liveness_start(body: LivenessStart) -> dict[str, Any]:
 async def liveness_complete(
     session_id: str = Form(...),
     challenge_id: str = Form(...),
-    client_passed: bool = Form(...),
+    client_passed: str = Form(...),
     file: UploadFile | None = File(None),
 ) -> dict[str, Any]:
-    """Accept at most one verified frame after a client-side pass."""
+    """Accept at most one verified frame after a client-side pass.
+
+    ``client_passed`` is accepted as a string (``true``/``false``) because
+    browser FormData always sends text fields; bool Form parsing has produced
+    422s against real multipart uploads from the UI.
+    """
     session = _session(session_id)
+    challenge_id = (challenge_id or "").strip()
+    if not challenge_id:
+        raise HTTPException(status_code=400, detail="missing challenge_id")
+    passed = str(client_passed).strip().lower() in {"1", "true", "yes", "on"}
+
     frame_sha = None
     data = b""
-    if file is not None and client_passed:
+    if file is not None and passed:
         data = await _read_upload(file)
         frame_sha = content_hash(data)
     try:
@@ -308,7 +319,7 @@ async def liveness_complete(
             session_id,
             challenge_id=challenge_id,
             frame_sha256=frame_sha or hashlib.sha256(b"").hexdigest(),
-            client_passed=client_passed,
+            client_passed=passed,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -371,7 +382,71 @@ async def liveness_status(session_id: str) -> dict[str, Any]:
     return {"session_id": session_id, **liveness_store.get(session_id).public()}
 
 
+@router.post("/vision/id-verify")
+async def vision_id_verify(
+    request: Request,
+    session_id: str = Form(...),
+    document_kind: str = Form(...),
+    parent_id: str | None = Form(None),
+    hop_depth: int = Form(1),
+    file: UploadFile = File(...),
+) -> dict[str, Any]:
+    """Demo photo-ID path — student ID or driver's license upload.
+
+    Mock OCR only (disclosed). Ingests redacted object_exposure findings and
+    marks the session as ``id_document`` assurance. No face-to-ID match.
+    """
+    check_session_budget(
+        endpoint="/intel/vision/id-verify",
+        session_id=session_id,
+        bucket="vision",
+        limit=VISION_ANALYSES_PER_SESSION,
+        ip=client_ip(request),
+    )
+    if document_kind not in ALLOWED_KINDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"document_kind must be one of {sorted(ALLOWED_KINDS)}",
+        )
+    session = _session(session_id)
+    data = await _read_upload(file)
+    try:
+        result = verify_document(
+            session,
+            data,
+            kind=document_kind,  # type: ignore[arg-type]
+            parent_id=parent_id,
+            hop_depth=hop_depth,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    session.log.record(
+        A.FINDING_ADDED,
+        actor=Origin.HUMAN,
+        subject="ddu-mirror-id-verify",
+        detail=(
+            f"Demo ID verify ({document_kind}) accepted "
+            f"{len(result.get('accepted') or [])} finding(s)"
+        ),
+        document_kind=document_kind,
+        sha256=result.get("sha256"),
+    )
+    _persist(session)
+    assert session.score is not None
+    result["score"] = session.score.model_dump(mode="json")
+    result["snapshot"] = session.snapshot().model_dump(mode="json")
+    return result
+
+
+@router.get("/vision/id-verify/{session_id}")
+async def vision_id_verify_status(session_id: str) -> dict[str, Any]:
+    _session(session_id)
+    return {"session_id": session_id, **id_verify_store.get(session_id).public()}
+
+
 def cleanup_session_vision(session_id: str) -> None:
-    """Called from session wipe — no dangling biometric state."""
+    """Called from session wipe — no dangling biometric / ID-demo state."""
     liveness_store.clear(session_id)
+    id_verify_store.clear(session_id)
     drop_corpus(session_id)

@@ -133,6 +133,10 @@ export function LivenessChallenge({
   } | null>(null);
 
   // Loop bookkeeping that must not trigger re-renders.
+  // challengeIdRef holds the in-flight id: setState is async, and the rAF
+  // loop calls complete() from the start() closure — reading React state there
+  // sent "" / a prior id and the server replied "challenge_id mismatch".
+  const challengeIdRef = useRef("");
   const lastVideoTime = useRef(-1);
   const lastStamp = useRef(0);
   const consecutiveErrors = useRef(0);
@@ -188,20 +192,37 @@ export function LivenessChallenge({
     return new Blob([bytes], {type: "image/jpeg"});
   }
 
-  async function complete(passed: boolean) {
+  async function complete(passed: boolean, issuedChallengeId?: string) {
     // Guard against the loop firing completion twice before rAF is cancelled.
     if (doneRef.current) return;
     doneRef.current = true;
 
+    const activeChallengeId = (issuedChallengeId || challengeIdRef.current || "").trim();
     const frame = passed ? captureFrame() : null;
     stopCamera();
     setProgress(passed ? 1 : 0);
+
+    if (!activeChallengeId) {
+      setError("No challenge in flight — start the check again.");
+      setPhase("failed");
+      onFailed?.();
+      return;
+    }
+
     try {
-      const result = await mirrorApi.livenessComplete(sessionId, challengeId, passed, frame);
+      const result = await mirrorApi.livenessComplete(
+        sessionId,
+        activeChallengeId,
+        passed,
+        frame,
+      );
       if (result.passed) {
         setPhase("passed");
         setTtl(result.template_ttl_seconds_remaining);
-        onPassed?.({challengeId, ttlSeconds: result.template_ttl_seconds_remaining});
+        onPassed?.({
+          challengeId: activeChallengeId,
+          ttlSeconds: result.template_ttl_seconds_remaining,
+        });
       } else {
         setPhase("failed");
         onFailed?.();
@@ -244,7 +265,12 @@ export function LivenessChallenge({
     ctx.restore();
   }
 
-  function evaluate(kind: LivenessChallengeKind, detection: Detection, dtMs: number) {
+  function evaluate(
+    kind: LivenessChallengeKind,
+    detection: Detection,
+    dtMs: number,
+    issuedChallengeId: string,
+  ) {
     const landmarks = detection.faceLandmarks?.[0];
     paintMesh(landmarks);
 
@@ -272,7 +298,7 @@ export function LivenessChallenge({
         blinkRef.current.count += 1;
       }
       setProgress(Math.min(1, blinkRef.current.count / BLINKS_NEEDED));
-      if (blinkRef.current.count >= BLINKS_NEEDED) void complete(true);
+      if (blinkRef.current.count >= BLINKS_NEEDED) void complete(true, issuedChallengeId);
       return;
     }
 
@@ -283,7 +309,7 @@ export function LivenessChallenge({
     else holdRef.current = Math.max(0, holdRef.current - dtMs * 1.5);
 
     setProgress(Math.min(1, holdRef.current / HOLD_MS));
-    if (holdRef.current >= HOLD_MS) void complete(true);
+    if (holdRef.current >= HOLD_MS) void complete(true, issuedChallengeId);
   }
 
   async function start() {
@@ -291,6 +317,9 @@ export function LivenessChallenge({
       setError("Please confirm biometric consent before the camera starts.");
       return;
     }
+    // Kill any prior rAF/camera before opening a new challenge — otherwise a
+    // leftover loop can complete against a stale or empty challenge id.
+    stopCamera();
     setError("");
     setPhase("starting");
     setProgress(0);
@@ -301,10 +330,18 @@ export function LivenessChallenge({
     lastVideoTime.current = -1;
     lastStamp.current = 0;
     consecutiveErrors.current = 0;
+    challengeIdRef.current = "";
 
     try {
       const started = await mirrorApi.livenessStart(sessionId);
-      setChallengeId(started.challenge_id);
+      const issuedId = String(started.challenge_id || "").trim();
+      if (!issuedId) {
+        throw new Error("Server did not return a challenge id");
+      }
+      // Capture in a local + ref — complete() must not depend on React state
+      // flushing before the detection loop finishes.
+      challengeIdRef.current = issuedId;
+      setChallengeId(issuedId);
       const kind = started.challenge as LivenessChallengeKind;
       setChallenge(kind);
 
@@ -324,7 +361,7 @@ export function LivenessChallenge({
       } catch {
         setMeshReady(false);
         setPhase("running");
-        setHint("Face tracking is unavailable in this browser. The camera is still local to your device.");
+        setHint("Face tracking is unavailable in this browser. Use Confirm manually, or try Photo ID.");
         return;
       }
 
@@ -358,7 +395,7 @@ export function LivenessChallenge({
         try {
           const detection = landmarker.detectForVideo(video, stamp);
           consecutiveErrors.current = 0;
-          evaluate(kind, detection, dtMs);
+          evaluate(kind, detection, dtMs, issuedId);
         } catch (reason) {
           consecutiveErrors.current += 1;
           // Transient failures are normal (a frame arrives mid-resize, the GPU
@@ -473,7 +510,11 @@ export function LivenessChallenge({
           </button>
         ) : null}
         {phase === "running" && !meshReady ? (
-          <button className="approve" onClick={() => void complete(true)} type="button">
+          <button
+            className="approve"
+            onClick={() => void complete(true, challengeIdRef.current)}
+            type="button"
+          >
             Confirm manually
           </button>
         ) : null}

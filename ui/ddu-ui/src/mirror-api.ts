@@ -311,6 +311,27 @@ export const mirrorApi = {
         body: JSON.stringify({session_id: sessionId}),
       },
     ),
+
+  idVerify: (sessionId: string, documentKind: "student_id" | "drivers_license", file: File) => {
+    const form = new FormData();
+    form.append("session_id", sessionId);
+    form.append("document_kind", documentKind);
+    form.append("file", file);
+    return requestForm<{
+      session_id: string;
+      sha256: string;
+      document_kind: string;
+      document_label: string;
+      assurance: "id_document";
+      verified: boolean;
+      fields: Record<string, string>;
+      disclosures: string[];
+      accepted: SessionSnapshot["findings"];
+      score: SessionSnapshot["score"];
+      snapshot: SessionSnapshot;
+      disclosure: string;
+    }>("/intel/vision/id-verify", form);
+  },
 };
 
 export function websocketURL(sessionId: string) {

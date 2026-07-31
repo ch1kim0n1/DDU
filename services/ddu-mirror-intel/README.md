@@ -52,7 +52,10 @@ disclosed in the response payloads rather than hidden — see *Honesty flags*.
 
 ## Engineer C — Vision & Biometrics
 
-Full documentation: [`docs/engineer-c-vision-biometrics.md`](../../docs/engineer-c-vision-biometrics.md).
+Module README (photo intelligence + ID verify):  
+[`mirror_intel/vision/README.md`](mirror_intel/vision/README.md)
+
+Charter / DoD: [`docs/engineer-c-vision-biometrics.md`](../../docs/engineer-c-vision-biometrics.md).
 
 ```bash
 # Curated demo JPEGs + hash cache ship in mirror_intel/data/vision_cache/
@@ -70,8 +73,10 @@ python scripts/generate_vision_demo_assets.py
 | `POST /intel/vision/face/enroll` | Closed-corpus enroll (verified avatar / upload) |
 | `POST /intel/vision/face/match` | Face-link findings (closed corpus only) |
 | `POST /intel/vision/liveness/start\|complete\|skip` | Client FaceMesh challenge + skip path |
+| `POST /intel/vision/id-verify` | Demo student ID / driver’s license (mock OCR) |
+| `GET  /intel/vision/id-verify/{session_id}` | ID-verify status |
 
-UI drop-ins: `ui/ddu-ui/src/LivenessChallenge.tsx`, `VisionPanel.tsx`.
+UI: `VisionPanel.tsx`, `LivenessChallenge.tsx`, `IdDocumentVerify.tsx`, `IdentityGate.tsx`.
 
 Tests: `pytest services/ddu-mirror-intel/test_vision_engineer_c.py -q`
 

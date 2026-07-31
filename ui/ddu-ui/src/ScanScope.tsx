@@ -97,9 +97,21 @@ const STATES = [
 type Props = {
   onConfirm: (choice: ScopeChoice) => void;
   onBack?: () => void;
-  assurance?: "live_face" | "email_only";
+  assurance?: "live_face" | "id_document" | "email_only";
   busy?: boolean;
 };
+
+function assuranceLabel(assurance: Props["assurance"]) {
+  if (assurance === "live_face") return "Live face verified";
+  if (assurance === "id_document") return "ID verified";
+  return "Email-only assurance";
+}
+
+function assuranceClass(assurance: Props["assurance"]) {
+  if (assurance === "live_face") return "is-live";
+  if (assurance === "id_document") return "is-id";
+  return "is-email";
+}
 
 export function ScanScope({onConfirm, onBack, assurance = "email_only", busy}: Props) {
   const [on, setOn] = useState<Set<ScopeKey>>(
@@ -154,8 +166,8 @@ export function ScanScope({onConfirm, onBack, assurance = "email_only", busy}: P
               nothing here starts a scan by itself.
             </p>
             <p style={{marginTop: 10}}>
-              <span className={`assurance ${assurance === "live_face" ? "is-live" : "is-email"}`}>
-                {assurance === "live_face" ? "Live face verified" : "Email-only assurance"}
+              <span className={`assurance ${assuranceClass(assurance)}`}>
+                {assuranceLabel(assurance)}
               </span>
             </p>
           </div>

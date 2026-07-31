@@ -29,7 +29,7 @@ import secrets
 from contextvars import ContextVar
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field, ValidationError
 
 from . import actionlog as A
@@ -283,12 +283,19 @@ async def contract() -> dict[str, Any]:
 
 @router.post("/session", tags=["Sessions"])
 @limiter.limit("5/hour", exempt_when=lambda: not limits_enabled())
-async def create_session(request: Request, body: SessionCreate) -> dict[str, Any]:
+async def create_session(
+    request: Request,
+    body: SessionCreate,
+    response: Response,
+) -> dict[str, Any]:
     """Register a session from an already-verified identity set.
 
     The caller is Engineer A's identity gate, after a code loop or OAuth. This
     endpoint trusts the set it is given and treats it as the ceiling — every
     downstream worker refuses anything outside it.
+
+    ``response`` is required by slowapi when ``headers_enabled=True`` and the
+    handler returns a dict (not a Response instance).
     """
     refused = refuse_dev_session_features(
         seed_mock=body.seed_mock_findings,

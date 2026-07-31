@@ -12,6 +12,7 @@ from mirror_intel.vision.cache import reload_cache
 from mirror_intel.vision.corpus import CorpusViolation, ClosedCorpus
 from mirror_intel.vision.exif import extract_exif
 from mirror_intel.vision.liveness import liveness_store
+from mirror_intel.vision.id_verify import id_verify_store, mock_ocr_fields
 
 CACHE_DIR = (
     Path(__file__).resolve().parent
@@ -212,3 +213,59 @@ def test_wipe_clears_liveness(client):
     client.post("/intel/vision/liveness/start", json={"session_id": sid})
     client.delete(f"/intel/session/{sid}")
     assert sid not in liveness_store._by_session
+
+
+def test_id_verify_demo_path(client):
+    sid = _session(client, "s_id_demo")
+    # Minimal JPEG-ish bytes are enough — OCR is mocked from sha256.
+    blob = b"\xff\xd8\xff\xe0" + b"demo-student-id-" + b"\x00" * 64
+    response = client.post(
+        "/intel/vision/id-verify",
+        data={"session_id": sid, "document_kind": "student_id"},
+        files={"file": ("student.jpg", blob, "image/jpeg")},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["assurance"] == "id_document"
+    assert body["verified"] is True
+    assert body["document_kind"] == "student_id"
+    assert body["fields"]
+    assert all(v == "REDACTED" for v in body["fields"].values())
+    assert any("mock" in d.lower() for d in body["disclosures"])
+    assert len(body["accepted"]) >= 1
+    finding = body["accepted"][0]
+    assert finding["type"] == "object_exposure"
+    assert finding["method"] == "mock:id-ocr-demo"
+    assert any(e.get("redacted") for e in finding["evidence"])
+
+    status = client.get(f"/intel/vision/id-verify/{sid}")
+    assert status.status_code == 200
+    assert status.json()["verified"] is True
+
+    # Same bytes → same mock fields (deterministic).
+    from mirror_intel.vision.cache import content_hash
+
+    again = mock_ocr_fields("student_id", content_hash(blob))
+    assert set(again) == set(body["fields"])
+
+
+def test_id_verify_rejects_bad_kind(client):
+    sid = _session(client, "s_id_bad")
+    response = client.post(
+        "/intel/vision/id-verify",
+        data={"session_id": sid, "document_kind": "passport"},
+        files={"file": ("x.jpg", b"abc", "image/jpeg")},
+    )
+    assert response.status_code == 400
+
+
+def test_wipe_clears_id_verify(client):
+    sid = _session(client, "s_wipe_id")
+    client.post(
+        "/intel/vision/id-verify",
+        data={"session_id": sid, "document_kind": "drivers_license"},
+        files={"file": ("dl.jpg", b"\xff\xd8license", "image/jpeg")},
+    )
+    assert id_verify_store.get(sid).verified is True
+    client.delete(f"/intel/session/{sid}")
+    assert sid not in id_verify_store._by_session
