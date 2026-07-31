@@ -1498,13 +1498,22 @@ body {
    fell into an implicit row and pushed the approval queue ~800px down.
    Rows are now explicit and the rail scrolls inside itself, so the human
    checkpoint stays at the top where a reviewer lands on it immediately. */
+/* Flex, not grid. As a grid with `auto` rows inside a height-constrained
+   container the rows compress below their content and the sections render on
+   top of one another — the vision panel printed straight through the
+   remediation panel. Flex children that refuse to shrink keep their natural
+   height and the rail scrolls instead. */
 .control-rail {
-  grid-template-rows: auto auto auto;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   overscroll-behavior: contain;
   background: rgba(10, 14, 20, 0.72);
   backdrop-filter: blur(var(--v2-blur));
+}
+
+.control-rail > * {
+  flex: 0 0 auto;
 }
 
 .control-rail::-webkit-scrollbar { width: 9px; }
@@ -2223,3 +2232,119 @@ body {
 }
 
 .wizard-body { padding-top: 22px; }
+
+/* ── 3D legend ────────────────────────────────────────────────────────
+   The scene encodes four variables; the key has to say so or the colours
+   are just colours. Sits over the canvas, out of the way of the orbit. */
+.scene-legend--v2 {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--v2-hairline);
+  background: rgba(6, 9, 14, 0.72);
+  backdrop-filter: blur(10px);
+  font-size: 11px;
+  color: var(--v2-text-dim);
+}
+
+.scene-legend--v2 span { display: inline-flex; align-items: center; gap: 6px; }
+
+.scene-legend--v2 i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.scene-legend--v2 .legend-note {
+  padding-left: 12px;
+  border-left: 1px solid var(--v2-hairline);
+  color: var(--v2-text-faint);
+  letter-spacing: 0.01em;
+}
+
+/* ── in-scene labels ──────────────────────────────────────────────────
+   These are real DOM, positioned in 3D by drei's <Html>, not canvas text.
+   drei's <Text> renders through troika, which fetches font files from
+   jsdelivr at runtime — a live CDN dependency inside the centrepiece of the
+   demo, which would have failed on bad venue WiFi. DOM labels have no
+   network dependency, use the interface's own typeface, and stay crisp at
+   any zoom instead of being resampled with the canvas. */
+.scene-tag,
+.scene-label {
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.scene-tag {
+  padding: 2px 7px;
+  border-radius: 99px;
+  border: 1px solid var(--v2-hairline);
+  background: rgba(6, 9, 14, 0.8);
+  color: var(--v2-text-faint);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+}
+
+.scene-tag--seed {
+  border-color: var(--v2-accent-dim);
+  background: rgba(79, 214, 255, 0.14);
+  color: var(--v2-accent);
+}
+
+.scene-tag--permanent {
+  border-color: rgba(255, 122, 89, 0.55);
+  background: rgba(255, 122, 89, 0.16);
+  color: #ff9d80;
+}
+
+.scene-label {
+  display: inline-block;
+  max-width: 220px;
+  padding: 5px 10px;
+  border-radius: var(--v2-radius-sm);
+  border: 1px solid var(--v2-hairline-hi);
+  background: rgba(10, 14, 20, 0.94);
+  backdrop-filter: blur(8px);
+  color: var(--v2-text);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: normal;
+  text-align: center;
+  box-shadow: var(--v2-shadow);
+}
+
+/* ── canvas fills its grid cell ───────────────────────────────────────
+   `.mirror-scene` carries an explicit clamped height because r3f collapses
+   to ~150px when given only a min-height. Inside the workspace that clamp
+   fought the grid: the rail is taller than 54vh, so the row stretched, the
+   scene did not, and a band of dead background sat under the canvas.
+   The grid row (`minmax(480px, 1fr)`) is already a definite size, so 100%
+   resolves properly here and the canvas tracks the rail's height. */
+.canvas-column .mirror-scene {
+  height: 100%;
+  min-height: 480px;
+}
+
+/* Keeps the workspace from growing without bound as findings accumulate.
+   This needs a definite `height`, not `max-height`: with max-height the grid
+   rows still size to content, so the rail rendered 2365px tall and was simply
+   clipped by `overflow: hidden` — the cards below the fold became unreachable
+   rather than scrollable. A definite height plus `min-height: 0` on both
+   columns lets the rail shrink and scroll inside itself instead. */
+.workspace {
+  height: min(860px, calc(100vh - 210px));
+  max-height: none;
+}
+
+.workspace > .canvas-column,
+.workspace > .control-rail {
+  min-height: 0;
+  height: 100%;
+}
