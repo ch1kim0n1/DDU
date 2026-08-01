@@ -529,7 +529,116 @@ body {
 }
 
 .assurance.is-live { color: #72ca9b; border-color: rgba(114, 202, 155, 0.4); }
+.assurance.is-id { color: #7cc4ff; border-color: rgba(124, 196, 255, 0.4); }
 .assurance.is-email { color: var(--bp-orange4); border-color: rgba(236, 154, 60, 0.36); }
+
+.verify-path-tabs,
+.id-kind-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 16px;
+  flex-wrap: wrap;
+}
+
+.verify-path-tabs button,
+.id-kind-tabs button {
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-glass);
+  color: var(--v2-text-dim);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.verify-path-tabs button.is-on,
+.id-kind-tabs button.is-on {
+  color: var(--v2-accent);
+  border-color: var(--v2-accent-dim);
+  background: rgba(124, 231, 255, 0.08);
+}
+
+.id-document-verify {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.id-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--v2-text);
+}
+
+.id-disclosure {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--v2-text-dim);
+}
+
+.id-upload-frame {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--v2-hairline);
+}
+
+.id-upload-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.id-upload-idle {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  color: var(--v2-text-dim);
+}
+
+.id-upload-idle span { font-size: 28px; opacity: 0.55; }
+.id-upload-idle p {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.id-result { display: flex; flex-direction: column; gap: 8px; }
+
+.id-field-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.id-field-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-glass);
+  color: var(--v2-text-dim);
+}
+
+.id-field-list em {
+  font-style: normal;
+  letter-spacing: 0.08em;
+  color: var(--bp-orange4);
+}
 
 /* ── Scope picker ── */
 
