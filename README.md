@@ -125,51 +125,7 @@ The 3D graph encodes reversibility as colour — cyan you can undo, amber you
 cannot — because which parts of your exposure you can still take back is the
 question the product exists to answer.
 
----
 
-## Pre-existing work disclosure
-
-Stated plainly rather than buried, per the hackathon terms.
-
-**This repository is not new.** It is the DDU platform repository, first commit
-**2026-07-21** — nine days before the hackathon kickoff on **2026-07-30 at
-10:00**. DDU Mirror is a defensive carve-out of that platform.
-
-Split at the kickoff timestamp:
-
-| | Commits | What |
-|---|---|---|
-| **Before kickoff** | 99 | The DDU platform, and the DDU Mirror backend: intel service, HITL orchestrator, discovery, scoring, attack paths, vision/liveness, voice, and the first UI. |
-| **During the event** | 5 | ~2,000 lines across 11 files — listed below. |
-
-Built during the 48-hour window:
-
-- The **Edit control**, end to end — `editable_inputs` exposed on the proposal
-  schema, the API client method, and the inline editor. Track 3 requires
-  approve / **edit** / reject; the backend had `/scan/edit` but no UI could
-  reach it, so this arm of the contract was not demonstrable before.
-- The **3D exposure graph rebuilt as a data encoding** — hop rings, severity as
-  height, reversibility as colour, confidence as cap brightness. It previously
-  encoded one secondary field as coloured shapes on a square grid.
-- **Removal of a runtime CDN dependency** from the 3D scene, which had been
-  fetching fonts from jsdelivr on every load.
-- The **entry-flow redesign** — landing, onboarding restructure, face-check UI,
-  scope picker, and the workspace information architecture.
-- Bugs found while verifying: a liveness freeze caused by an inverted yaw
-  comparison, a scan HUD that never centred and overlapped the approval queue,
-  a control rail that clipped its own contents, and a proposal card leaking
-  internal graph identifiers into the consent prompt.
-
-No third-party source is vendored into this repository. Reference clones of the
-upstream OSS projects live in a gitignored `open-source/` directory that is not
-committed and not distributed; everything third-party is consumed as a declared
-dependency instead.
-
-The wider DDU platform — [`docs/ddu-platform.md`](docs/ddu-platform.md),
-[`main-pdd.md`](main-pdd.md), [`engineering-roadmap.md`](engineering-roadmap.md),
-and the other services under [`services/`](services/) — predates the event
-entirely and is not part of this submission except where DDU Mirror depends on
-it.
 
 ---
 
