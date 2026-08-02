@@ -4,7 +4,7 @@
 
 A human-in-the-loop assistant for auditing your own public exposure. The agent
 drafts every move it wants to make; you approve, edit, or reject it; nothing
-runs until you do; and every decision lands in an append-only log.
+runs until you do; and every decision lands in an append-only log
 
 **Secure AI Hackathon — Track 3: Human-in-the-Loop AI Assistant.**
 
